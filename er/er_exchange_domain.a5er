@@ -1,0 +1,1414 @@
+﻿# A5:ER FORMAT:21
+# A5:ER ENCODING:UTF8
+# A5:ER Mk-1 Copyright © 2007 m.matsubara
+# A5:SQL Mk-2 Version 2.21.1 Copyright © 1997 - 2026 m.matsubara
+#  https://a5m2.mmatsubara.com
+
+[Manager]
+ProjectName=
+Author=
+MaxEntityRowShow=1000
+ReadOnlyRecommend=0
+PageInfo="Main",2,"A3Landscape",$FFFFFF
+LogicalView=1
+DecodeDomain=0
+ViewFormat=0
+UseNondependenceDashLine=0
+FontName=Tahoma
+FontSize=6
+PaperSize=A4Landscape
+HeaderLeft=
+HeaderCenter=
+HeaderRight=
+FooterLeft=
+FooterCenter=
+FooterRight=
+ShowPageoutRelation=1
+DefaultPkName=%0:s_PKC
+DefaultPkIndexName=%0:s_PKI
+DefaultIndexName=%0:s_IX%1:d
+DefaultFkName=%0:s_FK%1:d
+SqlSeparator=0
+UpperCaseKeyword=0
+ShowTag=1
+ShowCommonAttributes=0
+ShowDisableAttributes=0
+BugFixEntityWidth=1
+
+[Entity]
+PName=account_actions
+LName=口座措置履歴テーブル
+Comment=
+TableInnerOption=
+TableOption=
+Page=Main
+Left=900
+Top=2050
+Field="口座措置ID","id","bigint unsigned auto_increment","NOT NULL",0,"","",$FFFFFFFF,""
+Field="ユーザーID","user_id","bigint unsigned","NOT NULL",,"","",$FFFFFFFF,""
+Field="関連ケースID","suspicious_case_id","bigint unsigned",,,"","",$FFFFFFFF,""
+Field="措置種別(FREEZE/WITHDRAW等)","action_type","varchar(32)","NOT NULL",,"","",$FFFFFFFF,""
+Field="措置理由","action_reason","varchar(255)","NOT NULL",,"","",$FFFFFFFF,""
+Field="措置依頼日時","requested_at","datetime(6)","NOT NULL",,"","",$FFFFFFFF,""
+Field="措置完了日時","completed_at","datetime(6)",,,"","",$FFFFFFFF,""
+Field="作成日時","created_at","datetime(6)","NOT NULL",,"CURRENT_TIMESTAMP(6)","",$FFFFFFFF,""
+Field="更新日時","updated_at","datetime(6) on update CURRENT_TIMESTAMP","NOT NULL",,"CURRENT_TIMESTAMP(6)","",$FFFFFFFF,""
+IndexInfo="idx_account_actions_user_requested",0,"user_id,requested_at",""
+Index=idx_account_actions_user_requested=0,user_id,requested_at
+IndexInfo="fk_account_actions_case",0,"suspicious_case_id",""
+Index=fk_account_actions_case=0,suspicious_case_id
+EffectMode=None
+Color=$000000
+BkColor=$FFFFFF
+Position="Main",900,2050
+ZOrder=-1
+
+[Entity]
+PName=alert_event_logs
+LName=自動検知イベント履歴テーブル
+Comment=
+TableInnerOption=
+TableOption=
+Page=Main
+Left=2100
+Top=2550
+Field="検知イベントID","id","bigint unsigned auto_increment","NOT NULL",0,"","",$FFFFFFFF,""
+Field="ユーザーID","user_id","bigint unsigned","NOT NULL",,"","",$FFFFFFFF,""
+Field="ルールID","rule_id","bigint unsigned","NOT NULL",,"","",$FFFFFFFF,""
+Field="対象約定ID","trade_execution_id","bigint unsigned",,,"","",$FFFFFFFF,""
+Field="対象法定入金ID","fiat_deposit_id","bigint unsigned",,,"","",$FFFFFFFF,""
+Field="対象法定出金ID","fiat_withdrawal_id","bigint unsigned",,,"","",$FFFFFFFF,""
+Field="対象暗号資産入金ID","crypto_deposit_id","bigint unsigned",,,"","",$FFFFFFFF,""
+Field="対象暗号資産出金ID","crypto_withdrawal_id","bigint unsigned",,,"","",$FFFFFFFF,""
+Field="検知スコア","score","decimal(10,4)","NOT NULL",,"","",$FFFFFFFF,""
+Field="検知日時","detected_at","datetime(6)","NOT NULL",,"","",$FFFFFFFF,""
+Field="検知状態","status","varchar(32)","NOT NULL",,"","",$FFFFFFFF,""
+Field="メモ","note","varchar(255)","NOT NULL",,"","",$FFFFFFFF,""
+Field="作成日時","created_at","datetime(6)","NOT NULL",,"CURRENT_TIMESTAMP(6)","",$FFFFFFFF,""
+Field="更新日時","updated_at","datetime(6) on update CURRENT_TIMESTAMP","NOT NULL",,"CURRENT_TIMESTAMP(6)","",$FFFFFFFF,""
+IndexInfo="idx_alert_event_logs_user_detected",0,"user_id,detected_at",""
+Index=idx_alert_event_logs_user_detected=0,user_id,detected_at
+IndexInfo="idx_alert_event_logs_rule_detected",0,"rule_id,detected_at",""
+Index=idx_alert_event_logs_rule_detected=0,rule_id,detected_at
+IndexInfo="fk_alert_event_logs_trade_execution",0,"trade_execution_id",""
+Index=fk_alert_event_logs_trade_execution=0,trade_execution_id
+IndexInfo="fk_alert_event_logs_fiat_deposit",0,"fiat_deposit_id",""
+Index=fk_alert_event_logs_fiat_deposit=0,fiat_deposit_id
+IndexInfo="fk_alert_event_logs_fiat_withdrawal",0,"fiat_withdrawal_id",""
+Index=fk_alert_event_logs_fiat_withdrawal=0,fiat_withdrawal_id
+IndexInfo="fk_alert_event_logs_crypto_deposit",0,"crypto_deposit_id",""
+Index=fk_alert_event_logs_crypto_deposit=0,crypto_deposit_id
+IndexInfo="fk_alert_event_logs_crypto_withdrawal",0,"crypto_withdrawal_id",""
+Index=fk_alert_event_logs_crypto_withdrawal=0,crypto_withdrawal_id
+EffectMode=None
+Color=$000000
+BkColor=$FFFFFF
+Position="Main",2100,2550
+ZOrder=-2
+
+[Entity]
+PName=alert_rules
+LName=自動検知ルールテーブル
+Comment=
+TableInnerOption=
+TableOption=
+Page=Main
+Left=700
+Top=2650
+Field="ルールID","id","bigint unsigned auto_increment","NOT NULL",0,"","",$FFFFFFFF,""
+Field="外部公開用ルールハッシュID","public_rule_hash","char(64)","NOT NULL",,"","",$FFFFFFFF,""
+Field="ルール名","rule_name","varchar(128)","NOT NULL",,"","",$FFFFFFFF,""
+Field="ルール種別","rule_type","varchar(32)","NOT NULL",,"","",$FFFFFFFF,""
+Field="重要度","severity","varchar(16)","NOT NULL",,"","",$FFFFFFFF,""
+Field="閾値設定JSON","threshold_json","json","NOT NULL",,"","",$FFFFFFFF,""
+Field="有効フラグ","is_active","tinyint(1)","NOT NULL",,"1","",$FFFFFFFF,""
+Field="作成日時","created_at","datetime(6)","NOT NULL",,"CURRENT_TIMESTAMP(6)","",$FFFFFFFF,""
+Field="更新日時","updated_at","datetime(6) on update CURRENT_TIMESTAMP","NOT NULL",,"CURRENT_TIMESTAMP(6)","",$FFFFFFFF,""
+IndexInfo="uk_alert_rules_public_hash",2,"public_rule_hash",""
+Index=uk_alert_rules_public_hash=2,public_rule_hash
+IndexInfo="uk_alert_rules_name",2,"rule_name",""
+Index=uk_alert_rules_name=2,rule_name
+EffectMode=None
+Color=$000000
+BkColor=$FFFFFF
+Position="Main",700,2650
+ZOrder=-3
+
+[Entity]
+PName=case_status_histories
+LName=ケースステータス変更履歴テーブル
+Comment=
+TableInnerOption=
+TableOption=
+Page=Main
+Left=1600
+Top=150
+Field="ケース履歴ID","id","bigint unsigned auto_increment","NOT NULL",0,"","",$FFFFFFFF,""
+Field="ケースID","case_id","bigint unsigned","NOT NULL",,"","",$FFFFFFFF,""
+Field="変更前ステータス","from_status","varchar(32)",,,"","",$FFFFFFFF,""
+Field="変更後ステータス","to_status","varchar(32)","NOT NULL",,"","",$FFFFFFFF,""
+Field="変更理由","reason","varchar(255)","NOT NULL",,"","",$FFFFFFFF,""
+Field="実行者種別","actor_type","varchar(32)","NOT NULL",,"","",$FFFFFFFF,""
+Field="実行者識別子","actor_id","varchar(64)","NOT NULL",,"","",$FFFFFFFF,""
+Field="変更日時","changed_at","datetime(6)","NOT NULL",,"","",$FFFFFFFF,""
+Field="作成日時","created_at","datetime(6)","NOT NULL",,"CURRENT_TIMESTAMP(6)","",$FFFFFFFF,""
+Field="更新日時","updated_at","datetime(6) on update CURRENT_TIMESTAMP","NOT NULL",,"CURRENT_TIMESTAMP(6)","",$FFFFFFFF,""
+IndexInfo="idx_case_status_histories_case_changed",0,"case_id,changed_at",""
+Index=idx_case_status_histories_case_changed=0,case_id,changed_at
+EffectMode=None
+Color=$000000
+BkColor=$FFFFFF
+Position="Main",1600,150
+ZOrder=-5
+
+[Entity]
+PName=annual_income_brackets
+LName=年収区分マスタ
+Comment=
+TableInnerOption=
+TableOption=
+Page=Main
+Left=1250
+Top=100
+Field="年収区分ID","id","bigint unsigned auto_increment","NOT NULL",0,"","",$FFFFFFFF,""
+Field="表示名","name","varchar(128)","NOT NULL",,"","",$FFFFFFFF,""
+Field="システム識別値","value","varchar(64)","NOT NULL",,"","",$FFFFFFFF,""
+Field="説明","description","varchar(255)","NOT NULL",,"","",$FFFFFFFF,""
+Field="作成日時","created_at","datetime(6)","NOT NULL",,"CURRENT_TIMESTAMP(6)","",$FFFFFFFF,""
+Field="更新日時","updated_at","datetime(6) on update CURRENT_TIMESTAMP","NOT NULL",,"CURRENT_TIMESTAMP(6)","",$FFFFFFFF,""
+IndexInfo="uk_annual_income_brackets_value",2,"value",""
+Index=uk_annual_income_brackets_value=2,value
+EffectMode=None
+Color=$000000
+BkColor=$FFFFFF
+Position="Main",1250,100
+ZOrder=-4
+
+[Entity]
+PName=crypto_withdrawals
+LName=暗号資産出金テーブル
+Comment=
+TableInnerOption=
+TableOption=
+Page=Main
+Left=2400
+Top=1200
+Field="暗号資産出金ID","id","bigint unsigned auto_increment","NOT NULL",0,"","",$FFFFFFFF,""
+Field="ユーザーID","user_id","bigint unsigned","NOT NULL",,"","",$FFFFFFFF,""
+Field="外部公開用出金ハッシュID","public_withdrawal_hash","char(64)","NOT NULL",,"","",$FFFFFFFF,""
+Field="通貨ID","currency_id","bigint unsigned","NOT NULL",,"","",$FFFFFFFF,""
+Field="送金先アドレス","destination_address","varchar(255)","NOT NULL",,"","",$FFFFFFFF,""
+Field="出金数量","amount","decimal(36,18)","NOT NULL",,"","",$FFFFFFFF,""
+Field="ブロックチェーントランザクションハッシュ","tx_hash","varchar(128)",,,"","",$FFFFFFFF,""
+Field="出金ステータス","status","varchar(32)","NOT NULL",,"","",$FFFFFFFF,""
+Field="出金申請日時","requested_at","datetime(6)","NOT NULL",,"","",$FFFFFFFF,""
+Field="出金完了日時","completed_at","datetime(6)",,,"","",$FFFFFFFF,""
+Field="出金失敗日時","failed_at","datetime(6)",,,"","",$FFFFFFFF,""
+Field="作成日時","created_at","datetime(6)","NOT NULL",,"CURRENT_TIMESTAMP(6)","",$FFFFFFFF,""
+Field="更新日時","updated_at","datetime(6) on update CURRENT_TIMESTAMP","NOT NULL",,"CURRENT_TIMESTAMP(6)","",$FFFFFFFF,""
+IndexInfo="uk_crypto_withdrawals_public_hash",2,"public_withdrawal_hash",""
+Index=uk_crypto_withdrawals_public_hash=2,public_withdrawal_hash
+IndexInfo="idx_crypto_withdrawals_user_requested",0,"user_id,requested_at",""
+Index=idx_crypto_withdrawals_user_requested=0,user_id,requested_at
+IndexInfo="fk_crypto_withdrawals_currency",0,"currency_id",""
+Index=fk_crypto_withdrawals_currency=0,currency_id
+EffectMode=None
+Color=$000000
+BkColor=$FFFFFF
+Position="Main",2400,1200
+ZOrder=-7
+
+[Entity]
+PName=crypto_deposits
+LName=暗号資産入金テーブル
+Comment=
+TableInnerOption=
+TableOption=
+Page=Main
+Left=2000
+Top=100
+Field="暗号資産入金ID","id","bigint unsigned auto_increment","NOT NULL",0,"","",$FFFFFFFF,""
+Field="ユーザーID","user_id","bigint unsigned","NOT NULL",,"","",$FFFFFFFF,""
+Field="外部公開用入金ハッシュID","public_deposit_hash","char(64)","NOT NULL",,"","",$FFFFFFFF,""
+Field="通貨ID","currency_id","bigint unsigned","NOT NULL",,"","",$FFFFFFFF,""
+Field="ブロックチェーントランザクションハッシュ","tx_hash","varchar(128)","NOT NULL",,"","",$FFFFFFFF,""
+Field="入金数量","amount","decimal(36,18)","NOT NULL",,"","",$FFFFFFFF,""
+Field="入金ステータス","status","varchar(32)","NOT NULL",,"","",$FFFFFFFF,""
+Field="検知日時","detected_at","datetime(6)","NOT NULL",,"","",$FFFFFFFF,""
+Field="承認完了日時","confirmed_at","datetime(6)",,,"","",$FFFFFFFF,""
+Field="入金失敗日時","failed_at","datetime(6)",,,"","",$FFFFFFFF,""
+Field="作成日時","created_at","datetime(6)","NOT NULL",,"CURRENT_TIMESTAMP(6)","",$FFFFFFFF,""
+Field="更新日時","updated_at","datetime(6) on update CURRENT_TIMESTAMP","NOT NULL",,"CURRENT_TIMESTAMP(6)","",$FFFFFFFF,""
+IndexInfo="uk_crypto_deposits_public_hash",2,"public_deposit_hash",""
+Index=uk_crypto_deposits_public_hash=2,public_deposit_hash
+IndexInfo="uk_crypto_deposits_tx_hash_currency",2,"tx_hash,currency_id",""
+Index=uk_crypto_deposits_tx_hash_currency=2,tx_hash,currency_id
+IndexInfo="idx_crypto_deposits_user_detected",0,"user_id,detected_at",""
+Index=idx_crypto_deposits_user_detected=0,user_id,detected_at
+IndexInfo="fk_crypto_deposits_currency",0,"currency_id",""
+Index=fk_crypto_deposits_currency=0,currency_id
+EffectMode=None
+Color=$000000
+BkColor=$FFFFFF
+Position="Main",2000,100
+ZOrder=-6
+
+[Entity]
+PName=fiat_deposits
+LName=法定通貨入金テーブル
+Comment=
+TableInnerOption=
+TableOption=
+Page=Main
+Left=2650
+Top=850
+Field="法定入金ID","id","bigint unsigned auto_increment","NOT NULL",0,"","",$FFFFFFFF,""
+Field="ユーザーID","user_id","bigint unsigned","NOT NULL",,"","",$FFFFFFFF,""
+Field="外部公開用入金ハッシュID","public_deposit_hash","char(64)","NOT NULL",,"","",$FFFFFFFF,""
+Field="通貨ID","currency_id","bigint unsigned","NOT NULL",,"","",$FFFFFFFF,""
+Field="入金額","amount","decimal(36,18)","NOT NULL",,"","",$FFFFFFFF,""
+Field="入金ステータス","status","varchar(32)","NOT NULL",,"","",$FFFFFFFF,""
+Field="入金申請日時","requested_at","datetime(6)","NOT NULL",,"","",$FFFFFFFF,""
+Field="入金完了日時","completed_at","datetime(6)",,,"","",$FFFFFFFF,""
+Field="入金失敗日時","failed_at","datetime(6)",,,"","",$FFFFFFFF,""
+Field="作成日時","created_at","datetime(6)","NOT NULL",,"CURRENT_TIMESTAMP(6)","",$FFFFFFFF,""
+Field="更新日時","updated_at","datetime(6) on update CURRENT_TIMESTAMP","NOT NULL",,"CURRENT_TIMESTAMP(6)","",$FFFFFFFF,""
+IndexInfo="uk_fiat_deposits_public_hash",2,"public_deposit_hash",""
+Index=uk_fiat_deposits_public_hash=2,public_deposit_hash
+IndexInfo="idx_fiat_deposits_user_requested",0,"user_id,requested_at",""
+Index=idx_fiat_deposits_user_requested=0,user_id,requested_at
+IndexInfo="fk_fiat_deposits_currency",0,"currency_id",""
+Index=fk_fiat_deposits_currency=0,currency_id
+EffectMode=None
+Color=$000000
+BkColor=$FFFFFF
+Position="Main",2650,850
+ZOrder=-9
+
+[Entity]
+PName=currencies
+LName=通貨マスタ
+Comment=
+TableInnerOption=
+TableOption=
+Page=Main
+Left=600
+Top=2400
+Field="通貨ID","id","bigint unsigned auto_increment","NOT NULL",0,"","",$FFFFFFFF,""
+Field="通貨コード","code","varchar(16)","NOT NULL",,"","",$FFFFFFFF,""
+Field="通貨名","name","varchar(64)","NOT NULL",,"","",$FFFFFFFF,""
+Field="通貨種別(FIAT/CRYPTO)","currency_type","varchar(16)","NOT NULL",,"","",$FFFFFFFF,""
+Field="説明","description","varchar(255)","NOT NULL",,"","",$FFFFFFFF,""
+Field="作成日時","created_at","datetime(6)","NOT NULL",,"CURRENT_TIMESTAMP(6)","",$FFFFFFFF,""
+Field="更新日時","updated_at","datetime(6) on update CURRENT_TIMESTAMP","NOT NULL",,"CURRENT_TIMESTAMP(6)","",$FFFFFFFF,""
+IndexInfo="uk_currencies_code",2,"code",""
+Index=uk_currencies_code=2,code
+EffectMode=None
+Color=$000000
+BkColor=$FFFFFF
+Position="Main",600,2400
+ZOrder=-8
+
+[Entity]
+PName=occupations
+LName=職業区分マスタ
+Comment=
+TableInnerOption=
+TableOption=
+Page=Main
+Left=3350
+Top=50
+Field="職業ID","id","bigint unsigned auto_increment","NOT NULL",0,"","",$FFFFFFFF,""
+Field="表示名","name","varchar(128)","NOT NULL",,"","",$FFFFFFFF,""
+Field="システム識別値","value","varchar(64)","NOT NULL",,"","",$FFFFFFFF,""
+Field="説明","description","varchar(255)","NOT NULL",,"","",$FFFFFFFF,""
+Field="作成日時","created_at","datetime(6)","NOT NULL",,"CURRENT_TIMESTAMP(6)","",$FFFFFFFF,""
+Field="更新日時","updated_at","datetime(6) on update CURRENT_TIMESTAMP","NOT NULL",,"CURRENT_TIMESTAMP(6)","",$FFFFFFFF,""
+IndexInfo="uk_occupations_value",2,"value",""
+Index=uk_occupations_value=2,value
+EffectMode=None
+Color=$000000
+BkColor=$FFFFFF
+Position="Main",3350,50
+ZOrder=-12
+
+[Entity]
+PName=provisional_registrations
+LName=仮登録テーブル
+Comment=
+TableInnerOption=
+TableOption=
+Page=Main
+Left=2200
+Top=2200
+Field="仮登録ID","id","bigint unsigned auto_increment","NOT NULL",0,"","",$FFFFFFFF,""
+Field="外部公開用仮登録ハッシュID","public_registration_hash","char(64)","NOT NULL",,"","",$FFFFFFFF,""
+Field="メールアドレス","email","varchar(320)","NOT NULL",,"","",$FFFFFFFF,""
+Field="認証トークンのハッシュ","token_hash","char(64)","NOT NULL",,"","",$FFFFFFFF,""
+Field="有効期限","expires_at","datetime(6)","NOT NULL",,"","",$FFFFFFFF,""
+Field="認証完了日時","verified_at","datetime(6)",,,"","",$FFFFFFFF,""
+Field="仮登録キャンセル日時","cancelled_at","datetime(6)",,,"","",$FFFFFFFF,""
+Field="作成日時","created_at","datetime(6)","NOT NULL",,"CURRENT_TIMESTAMP(6)","",$FFFFFFFF,""
+Field="更新日時","updated_at","datetime(6) on update CURRENT_TIMESTAMP","NOT NULL",,"CURRENT_TIMESTAMP(6)","",$FFFFFFFF,""
+IndexInfo="uk_provisional_registrations_public_hash",2,"public_registration_hash",""
+Index=uk_provisional_registrations_public_hash=2,public_registration_hash
+IndexInfo="uk_provisional_registrations_token_hash",2,"token_hash",""
+Index=uk_provisional_registrations_token_hash=2,token_hash
+IndexInfo="idx_provisional_registrations_email",0,"email",""
+Index=idx_provisional_registrations_email=0,email
+IndexInfo="idx_provisional_registrations_expires_at",0,"expires_at",""
+Index=idx_provisional_registrations_expires_at=0,expires_at
+EffectMode=None
+Color=$000000
+BkColor=$FFFFFF
+Position="Main",2200,2200
+ZOrder=-13
+
+[Entity]
+PName=fiat_withdrawals
+LName=法定通貨出金テーブル
+Comment=
+TableInnerOption=
+TableOption=
+Page=Main
+Left=3550
+Top=500
+Field="法定出金ID","id","bigint unsigned auto_increment","NOT NULL",0,"","",$FFFFFFFF,""
+Field="ユーザーID","user_id","bigint unsigned","NOT NULL",,"","",$FFFFFFFF,""
+Field="外部公開用出金ハッシュID","public_withdrawal_hash","char(64)","NOT NULL",,"","",$FFFFFFFF,""
+Field="通貨ID","currency_id","bigint unsigned","NOT NULL",,"","",$FFFFFFFF,""
+Field="出金額","amount","decimal(36,18)","NOT NULL",,"","",$FFFFFFFF,""
+Field="出金ステータス","status","varchar(32)","NOT NULL",,"","",$FFFFFFFF,""
+Field="出金申請日時","requested_at","datetime(6)","NOT NULL",,"","",$FFFFFFFF,""
+Field="出金完了日時","completed_at","datetime(6)",,,"","",$FFFFFFFF,""
+Field="出金失敗日時","failed_at","datetime(6)",,,"","",$FFFFFFFF,""
+Field="作成日時","created_at","datetime(6)","NOT NULL",,"CURRENT_TIMESTAMP(6)","",$FFFFFFFF,""
+Field="更新日時","updated_at","datetime(6) on update CURRENT_TIMESTAMP","NOT NULL",,"CURRENT_TIMESTAMP(6)","",$FFFFFFFF,""
+IndexInfo="uk_fiat_withdrawals_public_hash",2,"public_withdrawal_hash",""
+Index=uk_fiat_withdrawals_public_hash=2,public_withdrawal_hash
+IndexInfo="idx_fiat_withdrawals_user_requested",0,"user_id,requested_at",""
+Index=idx_fiat_withdrawals_user_requested=0,user_id,requested_at
+IndexInfo="fk_fiat_withdrawals_currency",0,"currency_id",""
+Index=fk_fiat_withdrawals_currency=0,currency_id
+EffectMode=None
+Color=$000000
+BkColor=$FFFFFF
+Position="Main",3550,500
+ZOrder=-10
+
+[Entity]
+PName=financial_asset_brackets
+LName=金融資産区分マスタ
+Comment=
+TableInnerOption=
+TableOption=
+Page=Main
+Left=3100
+Top=450
+Field="金融資産区分ID","id","bigint unsigned auto_increment","NOT NULL",0,"","",$FFFFFFFF,""
+Field="表示名","name","varchar(128)","NOT NULL",,"","",$FFFFFFFF,""
+Field="システム識別値","value","varchar(64)","NOT NULL",,"","",$FFFFFFFF,""
+Field="説明","description","varchar(255)","NOT NULL",,"","",$FFFFFFFF,""
+Field="作成日時","created_at","datetime(6)","NOT NULL",,"CURRENT_TIMESTAMP(6)","",$FFFFFFFF,""
+Field="更新日時","updated_at","datetime(6) on update CURRENT_TIMESTAMP","NOT NULL",,"CURRENT_TIMESTAMP(6)","",$FFFFFFFF,""
+IndexInfo="uk_financial_asset_brackets_value",2,"value",""
+Index=uk_financial_asset_brackets_value=2,value
+EffectMode=None
+Color=$000000
+BkColor=$FFFFFF
+Position="Main",3100,450
+ZOrder=-11
+
+[Entity]
+PName=trade_executions
+LName=約定テーブル
+Comment=
+TableInnerOption=
+TableOption=
+Page=Main
+Left=50
+Top=450
+Field="約定ID","id","bigint unsigned auto_increment","NOT NULL",0,"","",$FFFFFFFF,""
+Field="注文ID","order_id","bigint unsigned","NOT NULL",,"","",$FFFFFFFF,""
+Field="ユーザーID","user_id","bigint unsigned","NOT NULL",,"","",$FFFFFFFF,""
+Field="外部公開用約定ハッシュID","public_execution_hash","char(64)","NOT NULL",,"","",$FFFFFFFF,""
+Field="交換元通貨ID","from_currency_id","bigint unsigned","NOT NULL",,"","",$FFFFFFFF,""
+Field="交換先通貨ID","to_currency_id","bigint unsigned","NOT NULL",,"","",$FFFFFFFF,""
+Field="約定価格","executed_price","decimal(36,18)","NOT NULL",,"","",$FFFFFFFF,""
+Field="約定数量","executed_quantity","decimal(36,18)","NOT NULL",,"","",$FFFFFFFF,""
+Field="手数料通貨ID","fee_currency_id","bigint unsigned","NOT NULL",,"","",$FFFFFFFF,""
+Field="手数料数量","fee_amount","decimal(36,18)","NOT NULL",,"\q0.000000000000000000\q","",$FFFFFFFF,""
+Field="約定日時","executed_at","datetime(6)","NOT NULL",,"","",$FFFFFFFF,""
+Field="作成日時","created_at","datetime(6)","NOT NULL",,"CURRENT_TIMESTAMP(6)","",$FFFFFFFF,""
+Field="更新日時","updated_at","datetime(6) on update CURRENT_TIMESTAMP","NOT NULL",,"CURRENT_TIMESTAMP(6)","",$FFFFFFFF,""
+IndexInfo="uk_trade_executions_public_hash",2,"public_execution_hash",""
+Index=uk_trade_executions_public_hash=2,public_execution_hash
+IndexInfo="idx_trade_executions_user_executed",0,"user_id,executed_at",""
+Index=idx_trade_executions_user_executed=0,user_id,executed_at
+IndexInfo="idx_trade_executions_order",0,"order_id",""
+Index=idx_trade_executions_order=0,order_id
+IndexInfo="fk_trade_executions_from_currency",0,"from_currency_id",""
+Index=fk_trade_executions_from_currency=0,from_currency_id
+IndexInfo="fk_trade_executions_to_currency",0,"to_currency_id",""
+Index=fk_trade_executions_to_currency=0,to_currency_id
+IndexInfo="fk_trade_executions_fee_currency",0,"fee_currency_id",""
+Index=fk_trade_executions_fee_currency=0,fee_currency_id
+EffectMode=None
+Color=$000000
+BkColor=$FFFFFF
+Position="Main",50,450
+ZOrder=-15
+
+[Entity]
+PName=suspicious_cases
+LName=疑わしい取引ケース管理テーブル
+Comment=
+TableInnerOption=
+TableOption=
+Page=Main
+Left=1700
+Top=2500
+Field="ケースID","id","bigint unsigned auto_increment","NOT NULL",0,"","",$FFFFFFFF,""
+Field="ユーザーID","user_id","bigint unsigned","NOT NULL",,"","",$FFFFFFFF,""
+Field="外部公開用ケースハッシュID","public_case_hash","char(64)","NOT NULL",,"","",$FFFFFFFF,""
+Field="起票者種別","opened_by_type","varchar(32)","NOT NULL",,"","",$FFFFFFFF,""
+Field="起票者識別子","opened_by_id","varchar(64)","NOT NULL",,"","",$FFFFFFFF,""
+Field="起票元種別(AUTO/MANUAL)","source_type","varchar(16)","NOT NULL",,"","",$FFFFFFFF,""
+Field="起点となる検知イベントID","alert_event_log_id","bigint unsigned",,,"","",$FFFFFFFF,""
+Field="ケースタイトル","title","varchar(255)","NOT NULL",,"","",$FFFFFFFF,""
+Field="現在ケースステータス","current_status","varchar(32)","NOT NULL",,"","",$FFFFFFFF,""
+Field="リスクレベル","risk_level","varchar(16)","NOT NULL",,"","",$FFFFFFFF,""
+Field="ケース開始日時","opened_at","datetime(6)","NOT NULL",,"","",$FFFFFFFF,""
+Field="ケース終了日時","closed_at","datetime(6)",,,"","",$FFFFFFFF,""
+Field="作成日時","created_at","datetime(6)","NOT NULL",,"CURRENT_TIMESTAMP(6)","",$FFFFFFFF,""
+Field="更新日時","updated_at","datetime(6) on update CURRENT_TIMESTAMP","NOT NULL",,"CURRENT_TIMESTAMP(6)","",$FFFFFFFF,""
+IndexInfo="uk_suspicious_cases_public_hash",2,"public_case_hash",""
+Index=uk_suspicious_cases_public_hash=2,public_case_hash
+IndexInfo="idx_suspicious_cases_user_opened",0,"user_id,opened_at",""
+Index=idx_suspicious_cases_user_opened=0,user_id,opened_at
+IndexInfo="idx_suspicious_cases_status",0,"current_status",""
+Index=idx_suspicious_cases_status=0,current_status
+IndexInfo="fk_suspicious_cases_alert_event_log",0,"alert_event_log_id",""
+Index=fk_suspicious_cases_alert_event_log=0,alert_event_log_id
+EffectMode=None
+Color=$000000
+BkColor=$FFFFFF
+Position="Main",1700,2500
+ZOrder=-14
+
+[Entity]
+PName=user_status_events
+LName=ユーザーステータス変更履歴テーブル
+Comment=
+TableInnerOption=
+TableOption=
+Page=Main
+Left=900
+Top=1100
+Field="ステータスイベントID","id","bigint unsigned auto_increment","NOT NULL",0,"","",$FFFFFFFF,""
+Field="ユーザーID","user_id","bigint unsigned","NOT NULL",,"","",$FFFFFFFF,""
+Field="変更前ステータスID","from_status_id","bigint unsigned",,,"","",$FFFFFFFF,""
+Field="変更後ステータスID","to_status_id","bigint unsigned","NOT NULL",,"","",$FFFFFFFF,""
+Field="イベント種別","event_type","varchar(64)","NOT NULL",,"","",$FFFFFFFF,""
+Field="理由","reason","varchar(255)","NOT NULL",,"","",$FFFFFFFF,""
+Field="実行者種別","actor_type","varchar(32)","NOT NULL",,"","",$FFFFFFFF,""
+Field="実行者識別子","actor_id","varchar(64)","NOT NULL",,"","",$FFFFFFFF,""
+Field="発生日時","occurred_at","datetime(6)","NOT NULL",,"","",$FFFFFFFF,""
+Field="作成日時","created_at","datetime(6)","NOT NULL",,"CURRENT_TIMESTAMP(6)","",$FFFFFFFF,""
+Field="更新日時","updated_at","datetime(6) on update CURRENT_TIMESTAMP","NOT NULL",,"CURRENT_TIMESTAMP(6)","",$FFFFFFFF,""
+IndexInfo="idx_user_status_events_user_occurred",0,"user_id,occurred_at",""
+Index=idx_user_status_events_user_occurred=0,user_id,occurred_at
+IndexInfo="fk_user_status_events_from_status",0,"from_status_id",""
+Index=fk_user_status_events_from_status=0,from_status_id
+IndexInfo="fk_user_status_events_to_status",0,"to_status_id",""
+Index=fk_user_status_events_to_status=0,to_status_id
+EffectMode=None
+Color=$000000
+BkColor=$FFFFFF
+Position="Main",900,1100
+ZOrder=-18
+
+[Entity]
+PName=user_profile_versions
+LName=ユーザープロファイル履歴テーブル
+Comment=
+TableInnerOption=
+TableOption=
+Page=Main
+Left=900
+Top=100
+Field="プロファイル履歴ID","id","bigint unsigned auto_increment","NOT NULL",0,"","",$FFFFFFFF,""
+Field="ユーザーID","user_id","bigint unsigned","NOT NULL",,"","",$FFFFFFFF,""
+Field="版番号","version_no","int unsigned","NOT NULL",,"","",$FFFFFFFF,""
+Field="姓","last_name","varchar(100)","NOT NULL",,"","",$FFFFFFFF,""
+Field="名","first_name","varchar(100)","NOT NULL",,"","",$FFFFFFFF,""
+Field="生年月日","birth_date","date","NOT NULL",,"","",$FFFFFFFF,""
+Field="国コード","country_code","char(2)","NOT NULL",,"","",$FFFFFFFF,""
+Field="職業区分ID","occupation_id","bigint unsigned","NOT NULL",,"","",$FFFFFFFF,""
+Field="年収区分ID","annual_income_bracket_id","bigint unsigned","NOT NULL",,"","",$FFFFFFFF,""
+Field="金融資産区分ID","financial_asset_bracket_id","bigint unsigned","NOT NULL",,"","",$FFFFFFFF,""
+Field="申告日時","declared_at","datetime(6)","NOT NULL",,"","",$FFFFFFFF,""
+Field="変更理由","change_reason","varchar(255)","NOT NULL",,"","",$FFFFFFFF,""
+Field="作成日時","created_at","datetime(6)","NOT NULL",,"CURRENT_TIMESTAMP(6)","",$FFFFFFFF,""
+Field="更新日時","updated_at","datetime(6) on update CURRENT_TIMESTAMP","NOT NULL",,"CURRENT_TIMESTAMP(6)","",$FFFFFFFF,""
+IndexInfo="uk_user_profile_versions_user_version",2,"user_id,version_no",""
+Index=uk_user_profile_versions_user_version=2,user_id,version_no
+IndexInfo="idx_user_profile_versions_user_declared",0,"user_id,declared_at",""
+Index=idx_user_profile_versions_user_declared=0,user_id,declared_at
+IndexInfo="fk_user_profile_versions_occupation",0,"occupation_id",""
+Index=fk_user_profile_versions_occupation=0,occupation_id
+IndexInfo="fk_user_profile_versions_income",0,"annual_income_bracket_id",""
+Index=fk_user_profile_versions_income=0,annual_income_bracket_id
+IndexInfo="fk_user_profile_versions_assets",0,"financial_asset_bracket_id",""
+Index=fk_user_profile_versions_assets=0,financial_asset_bracket_id
+EffectMode=None
+Color=$000000
+BkColor=$FFFFFF
+Position="Main",900,100
+ZOrder=-17
+
+[Entity]
+PName=trading_orders
+LName=取引注文テーブル
+Comment=
+TableInnerOption=
+TableOption=
+Page=Main
+Left=300
+Top=1150
+Field="注文ID","id","bigint unsigned auto_increment","NOT NULL",0,"","",$FFFFFFFF,""
+Field="ユーザーID","user_id","bigint unsigned","NOT NULL",,"","",$FFFFFFFF,""
+Field="外部公開用注文ハッシュID","public_order_hash","char(64)","NOT NULL",,"","",$FFFFFFFF,""
+Field="売買区分(BUY/SELL)","side","varchar(8)","NOT NULL",,"","",$FFFFFFFF,""
+Field="注文種別(LIMIT/MARKET)","order_type","varchar(16)","NOT NULL",,"","",$FFFFFFFF,""
+Field="交換元通貨ID","from_currency_id","bigint unsigned","NOT NULL",,"","",$FFFFFFFF,""
+Field="交換先通貨ID","to_currency_id","bigint unsigned","NOT NULL",,"","",$FFFFFFFF,""
+Field="注文価格","price","decimal(36,18)","NOT NULL",,"","",$FFFFFFFF,""
+Field="注文数量","quantity","decimal(36,18)","NOT NULL",,"","",$FFFFFFFF,""
+Field="注文ステータス","status","varchar(32)","NOT NULL",,"","",$FFFFFFFF,""
+Field="注文受付日時","placed_at","datetime(6)","NOT NULL",,"","",$FFFFFFFF,""
+Field="注文キャンセル日時","cancelled_at","datetime(6)",,,"","",$FFFFFFFF,""
+Field="作成日時","created_at","datetime(6)","NOT NULL",,"CURRENT_TIMESTAMP(6)","",$FFFFFFFF,""
+Field="更新日時","updated_at","datetime(6) on update CURRENT_TIMESTAMP","NOT NULL",,"CURRENT_TIMESTAMP(6)","",$FFFFFFFF,""
+IndexInfo="uk_trading_orders_public_hash",2,"public_order_hash",""
+Index=uk_trading_orders_public_hash=2,public_order_hash
+IndexInfo="idx_trading_orders_user_placed",0,"user_id,placed_at",""
+Index=idx_trading_orders_user_placed=0,user_id,placed_at
+IndexInfo="idx_trading_orders_pair",0,"from_currency_id,to_currency_id,placed_at",""
+Index=idx_trading_orders_pair=0,from_currency_id,to_currency_id,placed_at
+IndexInfo="fk_trading_orders_to_currency",0,"to_currency_id",""
+Index=fk_trading_orders_to_currency=0,to_currency_id
+EffectMode=None
+Color=$000000
+BkColor=$FFFFFF
+Position="Main",300,1150
+ZOrder=-16
+
+[Entity]
+PName=user_statuses
+LName=ユーザーステータス区分マスタ
+Comment=
+TableInnerOption=
+TableOption=
+Page=Main
+Left=1750
+Top=600
+Field="ユーザーステータスID","id","bigint unsigned auto_increment","NOT NULL",0,"","",$FFFFFFFF,""
+Field="表示名","name","varchar(64)","NOT NULL",,"","",$FFFFFFFF,""
+Field="システム識別値","value","varchar(64)","NOT NULL",,"","",$FFFFFFFF,""
+Field="説明","description","varchar(255)","NOT NULL",,"","",$FFFFFFFF,""
+Field="作成日時","created_at","datetime(6)","NOT NULL",,"CURRENT_TIMESTAMP(6)","",$FFFFFFFF,""
+Field="更新日時","updated_at","datetime(6) on update CURRENT_TIMESTAMP","NOT NULL",,"CURRENT_TIMESTAMP(6)","",$FFFFFFFF,""
+IndexInfo="uk_user_statuses_value",2,"value",""
+Index=uk_user_statuses_value=2,value
+EffectMode=None
+Color=$000000
+BkColor=$FFFFFF
+Position="Main",1750,600
+ZOrder=-19
+
+[Relation]
+Entity1=currencies
+Entity2=trade_executions
+RelationType1=2
+RelationType2=3
+Fields1=id
+Fields2=to_currency_id
+Cardinarity1=
+Cardinarity2=
+Position="MAIN",0,3400,8100,8705,R,R,""
+Dependence=0
+Caption=
+PName=
+LineMode=0
+Bar1=340
+Bar2=810
+Bar3=870
+TermPos1=R
+TermPos2=R
+ZOrder=-44
+
+[Relation]
+Entity1=users
+Entity2=trade_executions
+RelationType1=2
+RelationType2=3
+Fields1=id
+Fields2=user_id
+Cardinarity1=
+Cardinarity2=
+Position="MAIN",0,400,5000,277,R,R,""
+Dependence=0
+Caption=
+PName=
+LineMode=0
+Bar1=40
+Bar2=500
+Bar3=28
+TermPos1=R
+TermPos2=R
+ZOrder=-45
+
+[Relation]
+Entity1=currencies
+Entity2=trading_orders
+RelationType1=2
+RelationType2=3
+Fields1=id
+Fields2=from_currency_id
+Cardinarity1=
+Cardinarity2=
+Position="MAIN",0,3100,4100,7900,R,R,""
+Dependence=0
+Caption=
+PName=
+LineMode=0
+Bar1=310
+Bar2=410
+Bar3=790
+TermPos1=R
+TermPos2=R
+ZOrder=-46
+
+[Relation]
+Entity1=currencies
+Entity2=trading_orders
+RelationType1=2
+RelationType2=3
+Fields1=id
+Fields2=to_currency_id
+Cardinarity1=
+Cardinarity2=
+Position="MAIN",0,8400,9800,9681,R,R,""
+Dependence=0
+Caption=
+PName=
+LineMode=0
+Bar1=840
+Bar2=980
+Bar3=968
+TermPos1=R
+TermPos2=R
+ZOrder=-47
+
+[Relation]
+Entity1=trading_orders
+Entity2=trade_executions
+RelationType1=2
+RelationType2=3
+Fields1=id
+Fields2=order_id
+Cardinarity1=
+Cardinarity2=
+Position="MAIN",0,7700,8100,200,R,R,""
+Dependence=0
+Caption=
+PName=
+LineMode=0
+Bar1=770
+Bar2=810
+Bar3=20
+TermPos1=R
+TermPos2=R
+ZOrder=-43
+
+[Relation]
+Entity1=alert_event_logs
+Entity2=suspicious_cases
+RelationType1=1
+RelationType2=3
+Fields1=id
+Fields2=alert_event_log_id
+Cardinarity1=
+Cardinarity2=
+Position="MAIN",0,800,6300,2740,R,R,""
+Dependence=0
+Caption=
+PName=
+LineMode=0
+Bar1=80
+Bar2=630
+Bar3=274
+TermPos1=R
+TermPos2=R
+ZOrder=-39
+
+[Relation]
+Entity1=users
+Entity2=suspicious_cases
+RelationType1=2
+RelationType2=3
+Fields1=id
+Fields2=user_id
+Cardinarity1=
+Cardinarity2=
+Position="MAIN",0,1500,6600,9485,R,R,""
+Dependence=0
+Caption=
+PName=
+LineMode=0
+Bar1=150
+Bar2=660
+Bar3=948
+TermPos1=R
+TermPos2=R
+ZOrder=-40
+
+[Relation]
+Entity1=currencies
+Entity2=trade_executions
+RelationType1=2
+RelationType2=3
+Fields1=id
+Fields2=fee_currency_id
+Cardinarity1=
+Cardinarity2=
+Position="MAIN",0,1200,6100,8693,R,R,""
+Dependence=0
+Caption=
+PName=
+LineMode=0
+Bar1=120
+Bar2=610
+Bar3=869
+TermPos1=R
+TermPos2=R
+ZOrder=-41
+
+[Relation]
+Entity1=currencies
+Entity2=trade_executions
+RelationType1=2
+RelationType2=3
+Fields1=id
+Fields2=from_currency_id
+Cardinarity1=
+Cardinarity2=
+Position="MAIN",0,3600,8100,4725,R,R,""
+Dependence=0
+Caption=
+PName=
+LineMode=0
+Bar1=360
+Bar2=810
+Bar3=472
+TermPos1=R
+TermPos2=R
+ZOrder=-42
+
+[Relation]
+Entity1=user_statuses
+Entity2=user_status_events
+RelationType1=1
+RelationType2=3
+Fields1=id
+Fields2=from_status_id
+Cardinarity1=
+Cardinarity2=
+Position="MAIN",0,9300,5200,300,R,R,""
+Dependence=0
+Caption=
+PName=
+LineMode=0
+Bar1=930
+Bar2=520
+Bar3=30
+TermPos1=R
+TermPos2=R
+ZOrder=-53
+
+[Relation]
+Entity1=user_statuses
+Entity2=user_status_events
+RelationType1=2
+RelationType2=3
+Fields1=id
+Fields2=to_status_id
+Cardinarity1=
+Cardinarity2=
+Position="MAIN",0,6200,2200,2500,R,R,""
+Dependence=0
+Caption=
+PName=
+LineMode=0
+Bar1=620
+Bar2=220
+Bar3=250
+TermPos1=R
+TermPos2=R
+ZOrder=-54
+
+[Relation]
+Entity1=users
+Entity2=user_status_events
+RelationType1=2
+RelationType2=3
+Fields1=id
+Fields2=user_id
+Cardinarity1=
+Cardinarity2=
+Position="MAIN",0,500,900,874,R,R,""
+Dependence=0
+Caption=
+PName=
+LineMode=0
+Bar1=50
+Bar2=90
+Bar3=87
+TermPos1=R
+TermPos2=R
+ZOrder=-55
+
+[Relation]
+Entity1=user_statuses
+Entity2=users
+RelationType1=2
+RelationType2=3
+Fields1=id
+Fields2=current_status_id
+Cardinarity1=
+Cardinarity2=
+Position="MAIN",0,1800,1200,6879,R,R,""
+Dependence=0
+Caption=
+PName=
+LineMode=0
+Bar1=180
+Bar2=120
+Bar3=688
+TermPos1=R
+TermPos2=R
+ZOrder=-56
+
+[Relation]
+Entity1=users
+Entity2=user_profile_versions
+RelationType1=2
+RelationType2=3
+Fields1=id
+Fields2=user_id
+Cardinarity1=
+Cardinarity2=
+Position="MAIN",0,9900,8700,9500,R,R,""
+Dependence=0
+Caption=
+PName=
+LineMode=0
+Bar1=990
+Bar2=870
+Bar3=950
+TermPos1=R
+TermPos2=R
+ZOrder=-52
+
+[Relation]
+Entity1=users
+Entity2=trading_orders
+RelationType1=2
+RelationType2=3
+Fields1=id
+Fields2=user_id
+Cardinarity1=
+Cardinarity2=
+Position="MAIN",0,2300,9800,6400,R,R,""
+Dependence=0
+Caption=
+PName=
+LineMode=0
+Bar1=230
+Bar2=980
+Bar3=640
+TermPos1=R
+TermPos2=R
+ZOrder=-48
+
+[Relation]
+Entity1=financial_asset_brackets
+Entity2=user_profile_versions
+RelationType1=2
+RelationType2=3
+Fields1=id
+Fields2=financial_asset_bracket_id
+Cardinarity1=
+Cardinarity2=
+Position="MAIN",0,7200,5600,9047,R,R,""
+Dependence=0
+Caption=
+PName=
+LineMode=0
+Bar1=720
+Bar2=560
+Bar3=905
+TermPos1=R
+TermPos2=R
+ZOrder=-49
+
+[Relation]
+Entity1=annual_income_brackets
+Entity2=user_profile_versions
+RelationType1=2
+RelationType2=3
+Fields1=id
+Fields2=annual_income_bracket_id
+Cardinarity1=
+Cardinarity2=
+Position="MAIN",0,6400,9300,4700,R,R,""
+Dependence=0
+Caption=
+PName=
+LineMode=0
+Bar1=640
+Bar2=930
+Bar3=470
+TermPos1=R
+TermPos2=R
+ZOrder=-50
+
+[Relation]
+Entity1=occupations
+Entity2=user_profile_versions
+RelationType1=2
+RelationType2=3
+Fields1=id
+Fields2=occupation_id
+Cardinarity1=
+Cardinarity2=
+Position="MAIN",0,4700,6600,5500,R,R,""
+Dependence=0
+Caption=
+PName=
+LineMode=0
+Bar1=470
+Bar2=660
+Bar3=550
+TermPos1=R
+TermPos2=R
+ZOrder=-51
+
+[Relation]
+Entity1=users
+Entity2=fiat_withdrawals
+RelationType1=2
+RelationType2=3
+Fields1=id
+Fields2=user_id
+Cardinarity1=
+Cardinarity2=
+Position="MAIN",0,2900,8300,9000,R,R,""
+Dependence=0
+Caption=
+PName=
+LineMode=0
+Bar1=290
+Bar2=830
+Bar3=900
+TermPos1=R
+TermPos2=R
+ZOrder=-38
+
+[Relation]
+Entity1=fiat_deposits
+Entity2=alert_event_logs
+RelationType1=1
+RelationType2=3
+Fields1=id
+Fields2=fiat_deposit_id
+Cardinarity1=
+Cardinarity2=
+Position="MAIN",0,2900,2900,527,R,R,""
+Dependence=0
+Caption=
+PName=
+LineMode=0
+Bar1=290
+Bar2=290
+Bar3=53
+TermPos1=R
+TermPos2=R
+ZOrder=-25
+
+[Relation]
+Entity1=fiat_withdrawals
+Entity2=alert_event_logs
+RelationType1=1
+RelationType2=3
+Fields1=id
+Fields2=fiat_withdrawal_id
+Cardinarity1=
+Cardinarity2=
+Position="MAIN",0,7400,9100,8341,R,R,""
+Dependence=0
+Caption=
+PName=
+LineMode=0
+Bar1=740
+Bar2=910
+Bar3=834
+TermPos1=R
+TermPos2=R
+ZOrder=-26
+
+[Relation]
+Entity1=alert_rules
+Entity2=alert_event_logs
+RelationType1=2
+RelationType2=3
+Fields1=id
+Fields2=rule_id
+Cardinarity1=
+Cardinarity2=
+Position="MAIN",0,7700,2000,451,R,R,""
+Dependence=0
+Caption=
+PName=
+LineMode=0
+Bar1=770
+Bar2=200
+Bar3=45
+TermPos1=R
+TermPos2=R
+ZOrder=-27
+
+[Relation]
+Entity1=trade_executions
+Entity2=alert_event_logs
+RelationType1=1
+RelationType2=3
+Fields1=id
+Fields2=trade_execution_id
+Cardinarity1=
+Cardinarity2=
+Position="MAIN",0,9200,8400,8300,R,R,""
+Dependence=0
+Caption=
+PName=
+LineMode=0
+Bar1=920
+Bar2=840
+Bar3=830
+TermPos1=R
+TermPos2=R
+ZOrder=-28
+
+[Relation]
+Entity1=crypto_withdrawals
+Entity2=alert_event_logs
+RelationType1=1
+RelationType2=3
+Fields1=id
+Fields2=crypto_withdrawal_id
+Cardinarity1=
+Cardinarity2=
+Position="MAIN",0,2800,7300,6903,R,R,""
+Dependence=0
+Caption=
+PName=
+LineMode=0
+Bar1=280
+Bar2=730
+Bar3=690
+TermPos1=R
+TermPos2=R
+ZOrder=-24
+
+[Entity]
+PName=users
+LName=ユーザー最新状態テーブル
+Comment=
+TableInnerOption=
+TableOption=
+Page=Main
+Left=1550
+Top=1400
+Field="ユーザーID","id","bigint unsigned auto_increment","NOT NULL",0,"","",$FFFFFFFF,""
+Field="外部公開用ハッシュID","public_user_hash","char(64)","NOT NULL",,"","",$FFFFFFFF,""
+Field="会員コード","member_code","varchar(32)","NOT NULL",,"","",$FFFFFFFF,""
+Field="現在ステータスID","current_status_id","bigint unsigned","NOT NULL",,"","",$FFFFFFFF,""
+Field="本登録日時","registered_at","datetime(6)","NOT NULL",,"","",$FFFFFFFF,""
+Field="退会日時","withdrawn_at","datetime(6)",,,"","",$FFFFFFFF,""
+Field="凍結日時","frozen_at","datetime(6)",,,"","",$FFFFFFFF,""
+Field="作成日時","created_at","datetime(6)","NOT NULL",,"CURRENT_TIMESTAMP(6)","",$FFFFFFFF,""
+Field="更新日時","updated_at","datetime(6) on update CURRENT_TIMESTAMP","NOT NULL",,"CURRENT_TIMESTAMP(6)","",$FFFFFFFF,""
+IndexInfo="uk_users_public_user_hash",2,"public_user_hash",""
+Index=uk_users_public_user_hash=2,public_user_hash
+IndexInfo="uk_users_member_code",2,"member_code",""
+Index=uk_users_member_code=2,member_code
+IndexInfo="idx_users_current_status_id",0,"current_status_id",""
+Index=idx_users_current_status_id=0,current_status_id
+EffectMode=None
+Color=$000000
+BkColor=$FFFFFF
+Position="Main",1550,1400
+ZOrder=-20
+
+[Relation]
+Entity1=suspicious_cases
+Entity2=account_actions
+RelationType1=1
+RelationType2=3
+Fields1=id
+Fields2=suspicious_case_id
+Cardinarity1=
+Cardinarity2=
+Position="MAIN",0,6600,1800,2961,R,R,""
+Dependence=0
+Caption=
+PName=
+LineMode=0
+Bar1=660
+Bar2=180
+Bar3=296
+TermPos1=R
+TermPos2=R
+ZOrder=-21
+
+[Relation]
+Entity1=users
+Entity2=account_actions
+RelationType1=2
+RelationType2=3
+Fields1=id
+Fields2=user_id
+Cardinarity1=
+Cardinarity2=
+Position="MAIN",0,8300,3600,2762,R,R,""
+Dependence=0
+Caption=
+PName=
+LineMode=0
+Bar1=830
+Bar2=360
+Bar3=276
+TermPos1=R
+TermPos2=R
+ZOrder=-22
+
+[Relation]
+Entity1=crypto_deposits
+Entity2=alert_event_logs
+RelationType1=1
+RelationType2=3
+Fields1=id
+Fields2=crypto_deposit_id
+Cardinarity1=
+Cardinarity2=
+Position="MAIN",0,4700,2000,8600,R,R,""
+Dependence=0
+Caption=
+PName=
+LineMode=0
+Bar1=470
+Bar2=200
+Bar3=860
+TermPos1=R
+TermPos2=R
+ZOrder=-23
+
+[Relation]
+Entity1=users
+Entity2=crypto_withdrawals
+RelationType1=2
+RelationType2=3
+Fields1=id
+Fields2=user_id
+Cardinarity1=
+Cardinarity2=
+Position="MAIN",0,9300,5200,2600,R,R,""
+Dependence=0
+Caption=
+PName=
+LineMode=0
+Bar1=930
+Bar2=520
+Bar3=260
+TermPos1=R
+TermPos2=R
+ZOrder=-34
+
+[Relation]
+Entity1=currencies
+Entity2=fiat_deposits
+RelationType1=2
+RelationType2=3
+Fields1=id
+Fields2=currency_id
+Cardinarity1=
+Cardinarity2=
+Position="MAIN",0,3000,300,3555,R,R,""
+Dependence=0
+Caption=
+PName=
+LineMode=0
+Bar1=300
+Bar2=30
+Bar3=356
+TermPos1=R
+TermPos2=R
+ZOrder=-35
+
+[Relation]
+Entity1=users
+Entity2=fiat_deposits
+RelationType1=2
+RelationType2=3
+Fields1=id
+Fields2=user_id
+Cardinarity1=
+Cardinarity2=
+Position="MAIN",0,9500,8100,6700,R,R,""
+Dependence=0
+Caption=
+PName=
+LineMode=0
+Bar1=950
+Bar2=810
+Bar3=670
+TermPos1=R
+TermPos2=R
+ZOrder=-36
+
+[Relation]
+Entity1=currencies
+Entity2=fiat_withdrawals
+RelationType1=2
+RelationType2=3
+Fields1=id
+Fields2=currency_id
+Cardinarity1=
+Cardinarity2=
+Position="MAIN",0,5500,8500,3500,R,R,""
+Dependence=0
+Caption=
+PName=
+LineMode=0
+Bar1=550
+Bar2=850
+Bar3=350
+TermPos1=R
+TermPos2=R
+ZOrder=-37
+
+[Relation]
+Entity1=currencies
+Entity2=crypto_withdrawals
+RelationType1=2
+RelationType2=3
+Fields1=id
+Fields2=currency_id
+Cardinarity1=
+Cardinarity2=
+Position="MAIN",0,4900,7500,1029,R,R,""
+Dependence=0
+Caption=
+PName=
+LineMode=0
+Bar1=490
+Bar2=750
+Bar3=103
+TermPos1=R
+TermPos2=R
+ZOrder=-33
+
+[Relation]
+Entity1=users
+Entity2=alert_event_logs
+RelationType1=2
+RelationType2=3
+Fields1=id
+Fields2=user_id
+Cardinarity1=
+Cardinarity2=
+Position="MAIN",0,7000,300,4416,R,R,""
+Dependence=0
+Caption=
+PName=
+LineMode=0
+Bar1=700
+Bar2=30
+Bar3=442
+TermPos1=R
+TermPos2=R
+ZOrder=-29
+
+[Relation]
+Entity1=suspicious_cases
+Entity2=case_status_histories
+RelationType1=2
+RelationType2=3
+Fields1=id
+Fields2=case_id
+Cardinarity1=
+Cardinarity2=
+Position="MAIN",0,9000,3800,6608,R,R,""
+Dependence=0
+Caption=
+PName=
+LineMode=0
+Bar1=900
+Bar2=380
+Bar3=661
+TermPos1=R
+TermPos2=R
+ZOrder=-30
+
+[Relation]
+Entity1=currencies
+Entity2=crypto_deposits
+RelationType1=2
+RelationType2=3
+Fields1=id
+Fields2=currency_id
+Cardinarity1=
+Cardinarity2=
+Position="MAIN",0,2000,6000,8300,R,R,""
+Dependence=0
+Caption=
+PName=
+LineMode=0
+Bar1=200
+Bar2=600
+Bar3=830
+TermPos1=R
+TermPos2=R
+ZOrder=-31
+
+[Relation]
+Entity1=users
+Entity2=crypto_deposits
+RelationType1=2
+RelationType2=3
+Fields1=id
+Fields2=user_id
+Cardinarity1=
+Cardinarity2=
+Position="MAIN",0,5700,9700,7400,R,R,""
+Dependence=0
+Caption=
+PName=
+LineMode=0
+Bar1=570
+Bar2=970
+Bar3=740
+TermPos1=R
+TermPos2=R
+ZOrder=-32
