@@ -21,20 +21,29 @@ USE exchange_domain;
 */
 WITH user_trade_agg AS (
   SELECT
+    -- ランキング表示用の内部ユーザーID。
     u.id AS user_id,
+    -- 業務画面で扱いやすい会員コード。
     u.member_code,
+    -- 総約定件数。
     COUNT(*) AS execution_count,
+    -- 総約定数量。
     SUM(te.executed_quantity) AS total_base_volume,
+    -- 総名目出来高。
     SUM(te.executed_price * te.executed_quantity) AS total_notional_volume,
+    -- 初回約定日時。
     MIN(te.executed_at) AS first_executed_at,
+    -- 最終約定日時。
     MAX(te.executed_at) AS last_executed_at
   FROM trade_executions te
+  -- ユーザー表示情報を載せるため結合。
   INNER JOIN users u ON u.id = te.user_id
   GROUP BY
     u.id,
     u.member_code
 )
 SELECT
+  -- 名目出来高優先で同率順位を付与。
   RANK() OVER (
     ORDER BY
       total_notional_volume DESC,
@@ -50,6 +59,8 @@ SELECT
   last_executed_at
 FROM user_trade_agg
 ORDER BY
+  -- ランク順に上位から表示。
   rank_no,
+  -- 同順位内の表示順を安定化。
   user_id
 LIMIT 50;

@@ -14,24 +14,33 @@ USE exchange_domain;
   - 同日の他業務と比較すると、障害が業務横断か局所的かを切り分けやすい。
 */
 SELECT
+  -- 比較対象の業務種別。
   operation_type,
+  -- 日次の観測日。
   activity_date,
+  -- その日の総処理件数。
   total_count,
+  -- その日の失敗件数。
   failed_count,
+  -- ゼロ除算を避けつつ失敗率を百分率で表示。
   ROUND((failed_count / NULLIF(total_count, 0)) * 100, 2) AS failure_rate_pct
 FROM (
   SELECT
+    -- 法定入金の集計ブロック。
     'FIAT_DEPOSIT' AS operation_type,
     DATE(requested_at) AS activity_date,
     COUNT(*) AS total_count,
+    -- ステータスが FAILED の行だけ失敗件数に加算。
     SUM(CASE WHEN ds.value = 'FAILED' THEN 1 ELSE 0 END) AS failed_count
   FROM fiat_deposits
+  -- ステータスIDを業務的に解釈するためマスタ結合。
   INNER JOIN deposit_statuses ds ON ds.id = fiat_deposits.deposit_status_id
   GROUP BY DATE(requested_at)
 
   UNION ALL
 
   SELECT
+    -- 法定出金の集計ブロック。
     'FIAT_WITHDRAWAL' AS operation_type,
     DATE(requested_at) AS activity_date,
     COUNT(*) AS total_count,
@@ -43,6 +52,7 @@ FROM (
   UNION ALL
 
   SELECT
+    -- 暗号資産入金の集計ブロック。
     'CRYPTO_DEPOSIT' AS operation_type,
     DATE(detected_at) AS activity_date,
     COUNT(*) AS total_count,
@@ -54,6 +64,7 @@ FROM (
   UNION ALL
 
   SELECT
+    -- 暗号資産出金の集計ブロック。
     'CRYPTO_WITHDRAWAL' AS operation_type,
     DATE(requested_at) AS activity_date,
     COUNT(*) AS total_count,
@@ -63,6 +74,9 @@ FROM (
   GROUP BY DATE(requested_at)
 ) t
 ORDER BY
+  -- まず日付で束ねる。
   activity_date,
+  -- 同日内では失敗率が高い順に見る。
   failure_rate_pct DESC,
+  -- 同率時の表示順を安定化。
   operation_type;

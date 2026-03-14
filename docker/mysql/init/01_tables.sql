@@ -264,6 +264,8 @@ CREATE TABLE IF NOT EXISTS trade_executions (
   to_currency_id BIGINT UNSIGNED NOT NULL COMMENT '交換先通貨ID',
   executed_price DECIMAL(36, 18) NOT NULL COMMENT '約定価格',
   executed_quantity DECIMAL(36, 18) NOT NULL COMMENT '約定数量',
+  from_amount DECIMAL(36, 18) NOT NULL DEFAULT 0 COMMENT '交換元通貨での受払数量',
+  to_amount DECIMAL(36, 18) NOT NULL DEFAULT 0 COMMENT '交換先通貨での受取数量',
   fee_currency_id BIGINT UNSIGNED NOT NULL COMMENT '手数料通貨ID',
   fee_amount DECIMAL(36, 18) NOT NULL DEFAULT 0 COMMENT '手数料数量',
   executed_at DATETIME(6) NOT NULL COMMENT '約定日時',
@@ -275,6 +277,38 @@ CREATE TABLE IF NOT EXISTS trade_executions (
   CONSTRAINT fk_trade_executions_to_currency FOREIGN KEY (to_currency_id) REFERENCES currencies(id),
   CONSTRAINT fk_trade_executions_fee_currency FOREIGN KEY (fee_currency_id) REFERENCES currencies(id)
 ) ENGINE=InnoDB COMMENT='約定テーブル(追記専用)';
+
+SET @trade_exec_from_amount_exists := (
+  SELECT COUNT(*)
+  FROM information_schema.COLUMNS
+  WHERE TABLE_SCHEMA = 'exchange_domain'
+    AND TABLE_NAME = 'trade_executions'
+    AND COLUMN_NAME = 'from_amount'
+);
+SET @trade_exec_from_amount_sql := IF(
+  @trade_exec_from_amount_exists = 0,
+  'ALTER TABLE trade_executions ADD COLUMN from_amount DECIMAL(36, 18) NOT NULL DEFAULT 0 COMMENT ''交換元通貨での受払数量'' AFTER executed_quantity',
+  'SELECT 1'
+);
+PREPARE stmt FROM @trade_exec_from_amount_sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @trade_exec_to_amount_exists := (
+  SELECT COUNT(*)
+  FROM information_schema.COLUMNS
+  WHERE TABLE_SCHEMA = 'exchange_domain'
+    AND TABLE_NAME = 'trade_executions'
+    AND COLUMN_NAME = 'to_amount'
+);
+SET @trade_exec_to_amount_sql := IF(
+  @trade_exec_to_amount_exists = 0,
+  'ALTER TABLE trade_executions ADD COLUMN to_amount DECIMAL(36, 18) NOT NULL DEFAULT 0 COMMENT ''交換先通貨での受取数量'' AFTER from_amount',
+  'SELECT 1'
+);
+PREPARE stmt FROM @trade_exec_to_amount_sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
 
 CREATE TABLE IF NOT EXISTS fiat_deposits (
   id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY COMMENT '法定入金ID',
@@ -390,8 +424,11 @@ CREATE TABLE IF NOT EXISTS suspicious_cases (
   title VARCHAR(255) NOT NULL COMMENT 'ケースタイトル',
   current_status_id BIGINT UNSIGNED NOT NULL COMMENT '現在ケースステータスID',
   risk_level_id BIGINT UNSIGNED NOT NULL COMMENT 'リスクレベルID',
+  assigned_to VARCHAR(64) NULL COMMENT '担当者識別子',
   opened_at DATETIME(6) NOT NULL COMMENT '開始日時',
   closed_at DATETIME(6) NULL COMMENT '終了日時',
+  closed_reason VARCHAR(255) NULL COMMENT 'クローズ理由',
+  disposition VARCHAR(64) NULL COMMENT '最終判定',
   created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) COMMENT '作成日時',
   updated_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6) COMMENT '更新日時',
   CONSTRAINT fk_suspicious_cases_user FOREIGN KEY (user_id) REFERENCES users(id),
@@ -400,6 +437,118 @@ CREATE TABLE IF NOT EXISTS suspicious_cases (
   CONSTRAINT fk_suspicious_cases_status FOREIGN KEY (current_status_id) REFERENCES case_statuses(id),
   CONSTRAINT fk_suspicious_cases_risk FOREIGN KEY (risk_level_id) REFERENCES risk_levels(id)
 ) ENGINE=InnoDB COMMENT='疑わしい取引ケース管理テーブル';
+
+SET @suspicious_cases_assigned_to_exists := (
+  SELECT COUNT(*)
+  FROM information_schema.COLUMNS
+  WHERE TABLE_SCHEMA = 'exchange_domain'
+    AND TABLE_NAME = 'suspicious_cases'
+    AND COLUMN_NAME = 'assigned_to'
+);
+SET @suspicious_cases_assigned_to_sql := IF(
+  @suspicious_cases_assigned_to_exists = 0,
+  'ALTER TABLE suspicious_cases ADD COLUMN assigned_to VARCHAR(64) NULL COMMENT ''担当者識別子'' AFTER risk_level_id',
+  'SELECT 1'
+);
+PREPARE stmt FROM @suspicious_cases_assigned_to_sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @suspicious_cases_closed_reason_exists := (
+  SELECT COUNT(*)
+  FROM information_schema.COLUMNS
+  WHERE TABLE_SCHEMA = 'exchange_domain'
+    AND TABLE_NAME = 'suspicious_cases'
+    AND COLUMN_NAME = 'closed_reason'
+);
+SET @suspicious_cases_closed_reason_sql := IF(
+  @suspicious_cases_closed_reason_exists = 0,
+  'ALTER TABLE suspicious_cases ADD COLUMN closed_reason VARCHAR(255) NULL COMMENT ''クローズ理由'' AFTER closed_at',
+  'SELECT 1'
+);
+PREPARE stmt FROM @suspicious_cases_closed_reason_sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @suspicious_cases_disposition_exists := (
+  SELECT COUNT(*)
+  FROM information_schema.COLUMNS
+  WHERE TABLE_SCHEMA = 'exchange_domain'
+    AND TABLE_NAME = 'suspicious_cases'
+    AND COLUMN_NAME = 'disposition'
+);
+SET @suspicious_cases_disposition_sql := IF(
+  @suspicious_cases_disposition_exists = 0,
+  'ALTER TABLE suspicious_cases ADD COLUMN disposition VARCHAR(64) NULL COMMENT ''最終判定'' AFTER closed_reason',
+  'SELECT 1'
+);
+PREPARE stmt FROM @suspicious_cases_disposition_sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @idx_alert_event_logs_exists := (
+  SELECT COUNT(*)
+  FROM information_schema.STATISTICS
+  WHERE TABLE_SCHEMA = 'exchange_domain'
+    AND TABLE_NAME = 'alert_event_logs'
+    AND INDEX_NAME = 'idx_alert_event_logs_user_detected_at'
+);
+SET @idx_alert_event_logs_sql := IF(
+  @idx_alert_event_logs_exists = 0,
+  'CREATE INDEX idx_alert_event_logs_user_detected_at ON alert_event_logs (user_id, detected_at)',
+  'SELECT 1'
+);
+PREPARE stmt FROM @idx_alert_event_logs_sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @idx_suspicious_cases_exists := (
+  SELECT COUNT(*)
+  FROM information_schema.STATISTICS
+  WHERE TABLE_SCHEMA = 'exchange_domain'
+    AND TABLE_NAME = 'suspicious_cases'
+    AND INDEX_NAME = 'idx_suspicious_cases_user_opened_at'
+);
+SET @idx_suspicious_cases_sql := IF(
+  @idx_suspicious_cases_exists = 0,
+  'CREATE INDEX idx_suspicious_cases_user_opened_at ON suspicious_cases (user_id, opened_at)',
+  'SELECT 1'
+);
+PREPARE stmt FROM @idx_suspicious_cases_sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @idx_crypto_withdrawals_exists := (
+  SELECT COUNT(*)
+  FROM information_schema.STATISTICS
+  WHERE TABLE_SCHEMA = 'exchange_domain'
+    AND TABLE_NAME = 'crypto_withdrawals'
+    AND INDEX_NAME = 'idx_crypto_withdrawals_destination_completed_at'
+);
+SET @idx_crypto_withdrawals_sql := IF(
+  @idx_crypto_withdrawals_exists = 0,
+  'CREATE INDEX idx_crypto_withdrawals_destination_completed_at ON crypto_withdrawals (destination_address(128), completed_at)',
+  'SELECT 1'
+);
+PREPARE stmt FROM @idx_crypto_withdrawals_sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @idx_fiat_withdrawals_exists := (
+  SELECT COUNT(*)
+  FROM information_schema.STATISTICS
+  WHERE TABLE_SCHEMA = 'exchange_domain'
+    AND TABLE_NAME = 'fiat_withdrawals'
+    AND INDEX_NAME = 'idx_fiat_withdrawals_user_completed_at'
+);
+SET @idx_fiat_withdrawals_sql := IF(
+  @idx_fiat_withdrawals_exists = 0,
+  'CREATE INDEX idx_fiat_withdrawals_user_completed_at ON fiat_withdrawals (user_id, completed_at)',
+  'SELECT 1'
+);
+PREPARE stmt FROM @idx_fiat_withdrawals_sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
 
 CREATE TABLE IF NOT EXISTS case_status_histories (
   id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY COMMENT 'ケース履歴ID',

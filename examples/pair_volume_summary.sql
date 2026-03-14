@@ -18,21 +18,32 @@ USE exchange_domain;
   - BUY/SELL を分けて深掘りしたい場合は trading_orders と JOIN して side 別集計を追加する。
 */
 SELECT
+  -- 約定発生日。
   DATE(te.executed_at) AS traded_date,
+  -- 交換元通貨コード。
   cf.code AS from_currency,
+  -- 交換先通貨コード。
   ct.code AS to_currency,
+  -- ペアごとの約定件数。
   COUNT(*) AS execution_count,
+  -- 約定数量合計。
   SUM(te.executed_quantity) AS base_volume,
+  -- 価格 * 数量 の名目出来高。
   SUM(te.executed_price * te.executed_quantity) AS notional_volume
 FROM trade_executions te
+-- 通貨IDだと読みにくいため、コードに変換する。
 INNER JOIN currencies cf ON cf.id = te.from_currency_id
 INNER JOIN currencies ct ON ct.id = te.to_currency_id
 GROUP BY
+  -- 日別 x ペア別に集計。
   DATE(te.executed_at),
   cf.code,
   ct.code
 ORDER BY
+  -- 時系列で確認。
   traded_date,
+  -- 各日の主要ペアを先頭表示。
   execution_count DESC,
+  -- 同件数時の並びを安定化。
   from_currency,
   to_currency;
