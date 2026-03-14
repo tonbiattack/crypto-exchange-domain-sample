@@ -93,6 +93,30 @@ docker exec private-crypto-exchange-mysql sh -c "mysql -uapp -papp < /docker-ent
   - ユーザー単位の検知/ケース/措置/状態変更タイムラインを確認
 - `examples/pending_transaction_backlog_summary.sql`
   - PENDING 入出金の滞留状況を集計で確認
+- `examples/multi_hop_fund_flow_candidates.sql`
+  - 入金後に取引を挟んで別通貨で出金された多段資金移動候補を確認
+- `examples/alert_case_action_lead_time.sql`
+  - 検知からケース化、措置、状態変更までの所要時間を確認
+- `examples/same_destination_cluster_summary.sql`
+  - 同一アドレスへの出金集中クラスタを確認
+- `examples/case_reopen_and_realert_summary.sql`
+  - 再オープンや再検知が起きているケースを確認
+- `examples/balance_gap_root_cause_breakdown.sql`
+  - 理論残高差分の主因を外部入出金、約定、手数料に分けて確認
+- `examples/stuck_case_queue.sql`
+  - 長時間動いていないケースキューを一覧で確認
+
+通常版と `_procedural.sql` 版の使い分け:
+
+- 通常版
+  - 候補抽出や集計結果を 1 本の SQL でそのまま見たい時に向いています。
+- `_procedural.sql` 版
+  - 中間段階を temp table で分けたい時や、レビュー優先度・理由ラベルのような業務整形を後段で足したい時に向いています。
+
+閾値コメントの扱い:
+
+- `24時間`、`80%`、`7日` などの閾値は、サンプル SQL では固定値で書いています。
+- 実務で使う場合は、アプリケーション側から期間や閾値をパラメータとして渡せるようにする構成を推奨します。
 
 実行例:
 
@@ -126,6 +150,12 @@ Get-Content -Raw examples/status_change_after_alert.sql | docker exec -i private
 Get-Content -Raw examples/large_unmatched_crypto_inflow.sql | docker exec -i private-crypto-exchange-mysql mysql -uapp -papp
 Get-Content -Raw examples/user_alert_case_timeline.sql | docker exec -i private-crypto-exchange-mysql mysql -uapp -papp
 Get-Content -Raw examples/pending_transaction_backlog_summary.sql | docker exec -i private-crypto-exchange-mysql mysql -uapp -papp
+Get-Content -Raw examples/multi_hop_fund_flow_candidates.sql | docker exec -i private-crypto-exchange-mysql mysql -uapp -papp
+Get-Content -Raw examples/alert_case_action_lead_time.sql | docker exec -i private-crypto-exchange-mysql mysql -uapp -papp
+Get-Content -Raw examples/same_destination_cluster_summary.sql | docker exec -i private-crypto-exchange-mysql mysql -uapp -papp
+Get-Content -Raw examples/case_reopen_and_realert_summary.sql | docker exec -i private-crypto-exchange-mysql mysql -uapp -papp
+Get-Content -Raw examples/balance_gap_root_cause_breakdown.sql | docker exec -i private-crypto-exchange-mysql mysql -uapp -papp
+Get-Content -Raw examples/stuck_case_queue.sql | docker exec -i private-crypto-exchange-mysql mysql -uapp -papp
 ```
 
 ## Go 統合テスト

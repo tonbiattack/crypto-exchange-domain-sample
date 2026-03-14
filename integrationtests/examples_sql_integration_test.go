@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -3095,6 +3096,643 @@ func TestPendingTransactionBacklogSummaryProcedural(t *testing.T) {
 		}
 		if !foundOver24 || !foundUnder24 {
 			t.Fatalf("滞留中トランザクション手続き版に期待した集計行が見つかりませんでした: over24=%t under24=%t", foundOver24, foundUnder24)
+		}
+	})
+}
+
+func TestMultiHopFundFlowCandidates(t *testing.T) {
+	t.Run("多段資金移動候補_入金後の取引経由出金を返す", func(t *testing.T) {
+		ctx, tx, masters := setupTest(t)
+		base := time.Date(2031, 4, 6, 9, 0, 0, 0, time.UTC)
+
+		userBuilder := testdb.NewUserBuilder().WithStatusID(masters.ActiveUserStatusID)
+		memberCode := userBuilder.MemberCode
+		userID := userBuilder.BuildForTest(t, ctx, tx)
+
+		(&testdb.FiatDepositBuilder{
+			UserID:          userID,
+			PublicHash:      "multi-hop-fiat-deposit",
+			CurrencyID:      masters.JPYCurrencyID,
+			Amount:          "1000000",
+			DepositStatusID: masters.CompletedDepositStatusID,
+			RequestedAt:     base,
+			CompletedAt:     sql.NullTime{Time: base.Add(10 * time.Minute), Valid: true},
+		}).BuildForTest(t, ctx, tx)
+
+		orderID := (&testdb.TradingOrderBuilder{
+			UserID:         userID,
+			PublicHash:     "multi-hop-order",
+			Side:           "BUY",
+			OrderType:      "LIMIT",
+			FromCurrencyID: masters.JPYCurrencyID,
+			ToCurrencyID:   masters.BTCurrencyID,
+			Price:          "1000000",
+			Quantity:       "1.00000000",
+			OrderStatusID:  masters.FilledOrderStatusID,
+			PlacedAt:       base.Add(30 * time.Minute),
+		}).BuildForTest(t, ctx, tx)
+
+		tradeExecutionID := (&testdb.TradeExecutionBuilder{
+			OrderID:          orderID,
+			UserID:           userID,
+			PublicHash:       "multi-hop-execution",
+			FromCurrencyID:   masters.JPYCurrencyID,
+			ToCurrencyID:     masters.BTCurrencyID,
+			ExecutedPrice:    "1000000",
+			ExecutedQuantity: "1.00000000",
+			FromAmount:       "1000000.00000000",
+			ToAmount:         "1.00000000",
+			FeeCurrencyID:    masters.JPYCurrencyID,
+			FeeAmount:        "1000",
+			ExecutedAt:       base.Add(40 * time.Minute),
+		}).BuildForTest(t, ctx, tx)
+
+		cryptoWithdrawalID := (&testdb.CryptoWithdrawalBuilder{
+			UserID:             userID,
+			PublicHash:         "multi-hop-crypto-withdrawal",
+			CurrencyID:         masters.BTCurrencyID,
+			DestinationAddress: "multi-hop-destination",
+			Amount:             "0.90000000",
+			TxHash:             sql.NullString{String: "multi-hop-crypto-withdrawal-tx", Valid: true},
+			WithdrawalStatusID: masters.CompletedWithdrawalID,
+			RequestedAt:        base.Add(2 * time.Hour),
+			CompletedAt:        sql.NullTime{Time: base.Add(3 * time.Hour), Valid: true},
+		}).BuildForTest(t, ctx, tx)
+
+		rows := queryRows(t, ctx, tx, "examples/multi_hop_fund_flow_candidates.sql")
+		defer rows.Close()
+
+		var found bool
+		for rows.Next() {
+			var (
+				userIDGot                    int64
+				memberCodeGot                string
+				inflowType                   string
+				inflowID                     int64
+				inflowCurrencyCode           string
+				inflowAmount                 string
+				inflowCompletedAt            time.Time
+				tradeExecutionIDGot          int64
+				intermediateFromCurrencyCode string
+				intermediateToCurrencyCode   string
+				tradeFromAmount              string
+				tradeToAmount                string
+				executedAt                   time.Time
+				finalOutflowType             string
+				finalOutflowID               int64
+				finalOutflowCurrencyCode     string
+				finalOutflowAmount           string
+				outflowCompletedAt           time.Time
+				outflowVsTradeRatio          string
+			)
+			if err := rows.Scan(
+				&userIDGot,
+				&memberCodeGot,
+				&inflowType,
+				&inflowID,
+				&inflowCurrencyCode,
+				&inflowAmount,
+				&inflowCompletedAt,
+				&tradeExecutionIDGot,
+				&intermediateFromCurrencyCode,
+				&intermediateToCurrencyCode,
+				&tradeFromAmount,
+				&tradeToAmount,
+				&executedAt,
+				&finalOutflowType,
+				&finalOutflowID,
+				&finalOutflowCurrencyCode,
+				&finalOutflowAmount,
+				&outflowCompletedAt,
+				&outflowVsTradeRatio,
+			); err != nil {
+				t.Fatalf("多段資金移動候補の行読み取りに失敗しました: %v", err)
+			}
+			_ = inflowID
+			_ = inflowAmount
+			_ = inflowCompletedAt
+			_ = tradeFromAmount
+			_ = tradeToAmount
+			_ = executedAt
+			_ = outflowCompletedAt
+			if userIDGot == userID {
+				found = true
+				if memberCodeGot != memberCode || inflowType != "FIAT_DEPOSIT" || inflowCurrencyCode != "JPY" {
+					t.Fatalf("多段資金移動候補の流入情報が期待値と異なります: member=%s type=%s currency=%s", memberCodeGot, inflowType, inflowCurrencyCode)
+				}
+				if tradeExecutionIDGot != tradeExecutionID || intermediateFromCurrencyCode != "JPY" || intermediateToCurrencyCode != "BTC" {
+					t.Fatalf("多段資金移動候補の約定情報が期待値と異なります: trade=%d from=%s to=%s", tradeExecutionIDGot, intermediateFromCurrencyCode, intermediateToCurrencyCode)
+				}
+				if finalOutflowType != "CRYPTO_WITHDRAWAL" || finalOutflowID != cryptoWithdrawalID || finalOutflowCurrencyCode != "BTC" || finalOutflowAmount != "0.900000000000000000" {
+					t.Fatalf("多段資金移動候補の出金情報が期待値と異なります: type=%s id=%d currency=%s amount=%s", finalOutflowType, finalOutflowID, finalOutflowCurrencyCode, finalOutflowAmount)
+				}
+				if outflowVsTradeRatio != "0.9000" {
+					t.Fatalf("多段資金移動候補の比率が期待値と異なります: actual=%s", outflowVsTradeRatio)
+				}
+			}
+		}
+		if err := rows.Err(); err != nil {
+			t.Fatalf("多段資金移動候補の走査中に失敗しました: %v", err)
+		}
+		if !found {
+			t.Fatal("多段資金移動候補に挿入した行が見つかりませんでした")
+		}
+	})
+}
+
+func TestAlertCaseActionLeadTime(t *testing.T) {
+	t.Run("検知から措置までのリードタイム_ケース化と措置と状態変更の分数を返す", func(t *testing.T) {
+		ctx, tx, masters := setupTest(t)
+		base := time.Date(2031, 4, 7, 9, 0, 0, 0, time.UTC)
+
+		userBuilder := testdb.NewUserBuilder().WithStatusID(masters.ActiveUserStatusID)
+		memberCode := userBuilder.MemberCode
+		userID := userBuilder.BuildForTest(t, ctx, tx)
+
+		withdrawalID := (&testdb.FiatWithdrawalBuilder{
+			UserID:             userID,
+			PublicHash:         "lead-time-withdrawal",
+			CurrencyID:         masters.JPYCurrencyID,
+			Amount:             "900000",
+			WithdrawalStatusID: masters.CompletedWithdrawalID,
+			RequestedAt:        base,
+			CompletedAt:        sql.NullTime{Time: base.Add(5 * time.Minute), Valid: true},
+		}).BuildForTest(t, ctx, tx)
+		ruleID := (&testdb.AlertRuleBuilder{
+			PublicRuleHash: "7070707070707070707070707070707070707070707070707070707070707070",
+			RuleName:       "Lead Time Rule",
+			RuleType:       "LEAD_TIME",
+			Severity:       "HIGH",
+			ThresholdJSON:  `{"sample":true}`,
+		}).BuildForTest(t, ctx, tx)
+		detectedAt := base.Add(10 * time.Minute)
+		alertEventID := (&testdb.AlertEventLogBuilder{
+			UserID:             userID,
+			RuleID:             ruleID,
+			AlertEventStatusID: masters.OpenAlertStatusID,
+			FiatWithdrawalID:   withdrawalID,
+			TradeExecutionID:   sql.NullInt64{},
+			Score:              "90.5000",
+			DetectedAt:         detectedAt,
+			Note:               "lead-time-alert",
+		}).BuildForTest(t, ctx, tx)
+		caseID := (&testdb.SuspiciousCaseBuilder{
+			UserID:          userID,
+			PublicCaseHash:  "7171717171717171717171717171717171717171717171717171717171717171",
+			OpenedByTypeID:  masters.SystemActorTypeID,
+			OpenedByID:      "lead-time-batch",
+			SourceTypeID:    masters.AutoCaseSourceTypeID,
+			AlertEventLogID: sql.NullInt64{Int64: alertEventID, Valid: true},
+			Title:           "lead-time-case",
+			CurrentStatusID: masters.InvestigatingCaseStatusID,
+			RiskLevelID:     masters.HighRiskLevelID,
+			OpenedAt:        detectedAt.Add(15 * time.Minute),
+		}).BuildForTest(t, ctx, tx)
+		(&testdb.AccountActionBuilder{
+			UserID:           userID,
+			SuspiciousCaseID: sql.NullInt64{Int64: caseID, Valid: true},
+			ActionTypeID:     masters.FreezeActionTypeID,
+			ActorTypeID:      masters.AdminActorTypeID,
+			ActorID:          "lead-time-admin",
+			ActionReason:     "lead-time-freeze",
+			RequestedAt:      detectedAt.Add(25 * time.Minute),
+			CompletedAt:      sql.NullTime{Time: detectedAt.Add(30 * time.Minute), Valid: true},
+		}).BuildForTest(t, ctx, tx)
+		(&testdb.UserStatusChangeEventBuilder{
+			UserID:      userID,
+			EventTypeID: masters.FrozenEventTypeID,
+			ActorTypeID: masters.SystemActorTypeID,
+			ActorID:     "lead-time-status-batch",
+			Reason:      "lead-time-status-change",
+			OccurredAt:  detectedAt.Add(35 * time.Minute),
+		}).BuildForTest(t, ctx, tx)
+
+		rows := queryRows(t, ctx, tx, "examples/alert_case_action_lead_time.sql")
+		defer rows.Close()
+
+		var found bool
+		for rows.Next() {
+			var (
+				alertEventIDGot          int64
+				userIDGot                int64
+				memberCodeGot            string
+				ruleName                 string
+				detectedAtGot            time.Time
+				suspiciousCaseID         sql.NullInt64
+				caseOpenedAt             sql.NullTime
+				firstActionAt            sql.NullTime
+				firstStatusChangedAt     sql.NullTime
+				caseOpenDelayMinutes     sql.NullInt64
+				actionDelayMinutes       sql.NullInt64
+				statusChangeDelayMinutes sql.NullInt64
+			)
+			if err := rows.Scan(&alertEventIDGot, &userIDGot, &memberCodeGot, &ruleName, &detectedAtGot, &suspiciousCaseID, &caseOpenedAt, &firstActionAt, &firstStatusChangedAt, &caseOpenDelayMinutes, &actionDelayMinutes, &statusChangeDelayMinutes); err != nil {
+				t.Fatalf("検知から措置までのリードタイムの行読み取りに失敗しました: %v", err)
+			}
+			_ = detectedAtGot
+			_ = caseOpenedAt
+			_ = firstActionAt
+			_ = firstStatusChangedAt
+			if alertEventIDGot == alertEventID {
+				found = true
+				if userIDGot != userID || memberCodeGot != memberCode || ruleName != "Lead Time Rule" {
+					t.Fatalf("検知から措置までのリードタイムの属性が期待値と異なります: user=%d member=%s rule=%s", userIDGot, memberCodeGot, ruleName)
+				}
+				if !suspiciousCaseID.Valid || suspiciousCaseID.Int64 != caseID {
+					t.Fatalf("検知から措置までのリードタイムのケースIDが期待値と異なります: actual=%v", suspiciousCaseID)
+				}
+				if !caseOpenDelayMinutes.Valid || caseOpenDelayMinutes.Int64 != 15 {
+					t.Fatalf("ケース起票遅延分数が期待値と異なります: actual=%v", caseOpenDelayMinutes)
+				}
+				if !actionDelayMinutes.Valid || actionDelayMinutes.Int64 != 25 {
+					t.Fatalf("措置遅延分数が期待値と異なります: actual=%v", actionDelayMinutes)
+				}
+				if !statusChangeDelayMinutes.Valid || statusChangeDelayMinutes.Int64 != 35 {
+					t.Fatalf("状態変更遅延分数が期待値と異なります: actual=%v", statusChangeDelayMinutes)
+				}
+			}
+		}
+		if err := rows.Err(); err != nil {
+			t.Fatalf("検知から措置までのリードタイムの走査中に失敗しました: %v", err)
+		}
+		if !found {
+			t.Fatal("検知から措置までのリードタイムに挿入した行が見つかりませんでした")
+		}
+	})
+}
+
+func TestSameDestinationClusterSummary(t *testing.T) {
+	t.Run("同一送金先クラスタ集計_複数ユーザーの集中出金を返す", func(t *testing.T) {
+		ctx, tx, masters := setupTest(t)
+		now := currentDBTime(t, ctx, tx)
+
+		user1 := testdb.NewUserBuilder().WithStatusID(masters.ActiveUserStatusID)
+		memberCode1 := user1.MemberCode
+		userID1 := user1.BuildForTest(t, ctx, tx)
+		user2 := testdb.NewUserBuilder().WithStatusID(masters.ActiveUserStatusID)
+		memberCode2 := user2.MemberCode
+		userID2 := user2.BuildForTest(t, ctx, tx)
+
+		address := "same-destination-cluster-address"
+		(&testdb.CryptoWithdrawalBuilder{
+			UserID:             userID1,
+			PublicHash:         "same-destination-cluster-withdrawal-1",
+			CurrencyID:         masters.BTCurrencyID,
+			DestinationAddress: address,
+			Amount:             "0.70000000",
+			TxHash:             sql.NullString{String: "same-destination-cluster-tx-1", Valid: true},
+			WithdrawalStatusID: masters.CompletedWithdrawalID,
+			RequestedAt:        now.Add(-3 * time.Hour),
+			CompletedAt:        sql.NullTime{Time: now.Add(-2 * time.Hour), Valid: true},
+		}).BuildForTest(t, ctx, tx)
+		(&testdb.CryptoWithdrawalBuilder{
+			UserID:             userID2,
+			PublicHash:         "same-destination-cluster-withdrawal-2",
+			CurrencyID:         masters.BTCurrencyID,
+			DestinationAddress: address,
+			Amount:             "0.80000000",
+			TxHash:             sql.NullString{String: "same-destination-cluster-tx-2", Valid: true},
+			WithdrawalStatusID: masters.CompletedWithdrawalID,
+			RequestedAt:        now.Add(-90 * time.Minute),
+			CompletedAt:        sql.NullTime{Time: now.Add(-60 * time.Minute), Valid: true},
+		}).BuildForTest(t, ctx, tx)
+
+		rows := queryRows(t, ctx, tx, "examples/same_destination_cluster_summary.sql")
+		defer rows.Close()
+
+		var found bool
+		for rows.Next() {
+			var (
+				destinationAddress string
+				withdrawalCount    int64
+				userCount          int64
+				totalAmount        string
+				clusterStartAt     time.Time
+				clusterEndAt       time.Time
+				memberCodes        string
+			)
+			if err := rows.Scan(&destinationAddress, &withdrawalCount, &userCount, &totalAmount, &clusterStartAt, &clusterEndAt, &memberCodes); err != nil {
+				t.Fatalf("同一送金先クラスタ集計の行読み取りに失敗しました: %v", err)
+			}
+			_ = clusterStartAt
+			_ = clusterEndAt
+			if destinationAddress == address {
+				found = true
+				assertEqualInt64(t, withdrawalCount, 2, "同一送金先クラスタの出金件数")
+				assertEqualInt64(t, userCount, 2, "同一送金先クラスタのユーザー数")
+				if totalAmount != "1.500000000000000000" {
+					t.Fatalf("同一送金先クラスタの総出金量が期待値と異なります: actual=%s", totalAmount)
+				}
+				if !(strings.Contains(memberCodes, memberCode1) && strings.Contains(memberCodes, memberCode2)) {
+					t.Fatalf("同一送金先クラスタの会員コード一覧が期待値と異なります: actual=%s", memberCodes)
+				}
+			}
+		}
+		if err := rows.Err(); err != nil {
+			t.Fatalf("同一送金先クラスタ集計の走査中に失敗しました: %v", err)
+		}
+		if !found {
+			t.Fatal("同一送金先クラスタ集計に挿入した行が見つかりませんでした")
+		}
+	})
+}
+
+func TestCaseReopenAndRealertSummary(t *testing.T) {
+	t.Run("再オープン再検知ケース集計_再開と再アラート件数を返す", func(t *testing.T) {
+		ctx, tx, masters := setupTest(t)
+		base := time.Date(2031, 4, 8, 9, 0, 0, 0, time.UTC)
+
+		userBuilder := testdb.NewUserBuilder().WithStatusID(masters.ActiveUserStatusID)
+		memberCode := userBuilder.MemberCode
+		userID := userBuilder.BuildForTest(t, ctx, tx)
+
+		initialWithdrawalID := (&testdb.FiatWithdrawalBuilder{
+			UserID:             userID,
+			PublicHash:         "case-reopen-initial-withdrawal",
+			CurrencyID:         masters.JPYCurrencyID,
+			Amount:             "600000",
+			WithdrawalStatusID: masters.CompletedWithdrawalID,
+			RequestedAt:        base,
+			CompletedAt:        sql.NullTime{Time: base.Add(10 * time.Minute), Valid: true},
+		}).BuildForTest(t, ctx, tx)
+		initialRuleID := (&testdb.AlertRuleBuilder{
+			PublicRuleHash: "6060606060606060606060606060606060606060606060606060606060606060",
+			RuleName:       "Case Reopen Initial Rule",
+			RuleType:       "CASE_REOPEN_INITIAL",
+			Severity:       "HIGH",
+			ThresholdJSON:  `{"sample":true}`,
+		}).BuildForTest(t, ctx, tx)
+		initialAlertID := (&testdb.AlertEventLogBuilder{
+			UserID:             userID,
+			RuleID:             initialRuleID,
+			AlertEventStatusID: masters.OpenAlertStatusID,
+			FiatWithdrawalID:   initialWithdrawalID,
+			TradeExecutionID:   sql.NullInt64{},
+			Score:              "80.0000",
+			DetectedAt:         base.Add(20 * time.Minute),
+			Note:               "case-reopen-initial-alert",
+		}).BuildForTest(t, ctx, tx)
+
+		caseID := (&testdb.SuspiciousCaseBuilder{
+			UserID:          userID,
+			PublicCaseHash:  "6161616161616161616161616161616161616161616161616161616161616161",
+			OpenedByTypeID:  masters.SystemActorTypeID,
+			OpenedByID:      "case-reopen-batch",
+			SourceTypeID:    masters.AutoCaseSourceTypeID,
+			AlertEventLogID: sql.NullInt64{Int64: initialAlertID, Valid: true},
+			Title:           "case-reopen-case",
+			CurrentStatusID: masters.InvestigatingCaseStatusID,
+			RiskLevelID:     masters.HighRiskLevelID,
+			OpenedAt:        base.Add(25 * time.Minute),
+			ClosedAt:        sql.NullTime{Time: base.Add(2 * time.Hour), Valid: true},
+			ClosedReason:    sql.NullString{String: "initial close", Valid: true},
+			Disposition:     sql.NullString{String: "FALSE_POSITIVE", Valid: true},
+		}).BuildForTest(t, ctx, tx)
+
+		(&testdb.CaseStatusHistoryBuilder{
+			CaseID:       caseID,
+			FromStatusID: sql.NullInt64{Int64: masters.InvestigatingCaseStatusID, Valid: true},
+			ToStatusID:   masters.ClosedCaseStatusID,
+			ActorTypeID:  masters.AdminActorTypeID,
+			ActorID:      "case-reopen-admin-close",
+			Reason:       "close case",
+			ChangedAt:    base.Add(2 * time.Hour),
+		}).BuildForTest(t, ctx, tx)
+		(&testdb.CaseStatusHistoryBuilder{
+			CaseID:       caseID,
+			FromStatusID: sql.NullInt64{Int64: masters.ClosedCaseStatusID, Valid: true},
+			ToStatusID:   masters.InvestigatingCaseStatusID,
+			ActorTypeID:  masters.AdminActorTypeID,
+			ActorID:      "case-reopen-admin-reopen",
+			Reason:       "reopen case",
+			ChangedAt:    base.Add(3 * time.Hour),
+		}).BuildForTest(t, ctx, tx)
+
+		realertWithdrawalID := (&testdb.FiatWithdrawalBuilder{
+			UserID:             userID,
+			PublicHash:         "case-reopen-realert-withdrawal",
+			CurrencyID:         masters.JPYCurrencyID,
+			Amount:             "650000",
+			WithdrawalStatusID: masters.CompletedWithdrawalID,
+			RequestedAt:        base.Add(4 * time.Hour),
+			CompletedAt:        sql.NullTime{Time: base.Add(4*time.Hour + 10*time.Minute), Valid: true},
+		}).BuildForTest(t, ctx, tx)
+		realertRuleID := (&testdb.AlertRuleBuilder{
+			PublicRuleHash: "6262626262626262626262626262626262626262626262626262626262626262",
+			RuleName:       "Case Reopen Realert Rule",
+			RuleType:       "CASE_REOPEN_REALERT",
+			Severity:       "CRITICAL",
+			ThresholdJSON:  `{"sample":true}`,
+		}).BuildForTest(t, ctx, tx)
+		(&testdb.AlertEventLogBuilder{
+			UserID:             userID,
+			RuleID:             realertRuleID,
+			AlertEventStatusID: masters.OpenAlertStatusID,
+			FiatWithdrawalID:   realertWithdrawalID,
+			TradeExecutionID:   sql.NullInt64{},
+			Score:              "92.0000",
+			DetectedAt:         base.Add(4*time.Hour + 20*time.Minute),
+			Note:               "case-reopen-realert",
+		}).BuildForTest(t, ctx, tx)
+
+		rows := queryRows(t, ctx, tx, "examples/case_reopen_and_realert_summary.sql")
+		defer rows.Close()
+
+		var found bool
+		for rows.Next() {
+			var (
+				suspiciousCaseID int64
+				userIDGot        int64
+				memberCodeGot    string
+				title            string
+				currentStatus    string
+				openedAt         time.Time
+				closedAt         sql.NullTime
+				reopenCount      int64
+				reAlertCount     int64
+			)
+			if err := rows.Scan(&suspiciousCaseID, &userIDGot, &memberCodeGot, &title, &currentStatus, &openedAt, &closedAt, &reopenCount, &reAlertCount); err != nil {
+				t.Fatalf("再オープン再検知ケース集計の行読み取りに失敗しました: %v", err)
+			}
+			_ = openedAt
+			_ = closedAt
+			if suspiciousCaseID == caseID {
+				found = true
+				if userIDGot != userID || memberCodeGot != memberCode || title != "case-reopen-case" || currentStatus != "INVESTIGATING" {
+					t.Fatalf("再オープン再検知ケース集計の属性が期待値と異なります: user=%d member=%s title=%s status=%s", userIDGot, memberCodeGot, title, currentStatus)
+				}
+				assertEqualInt64(t, reopenCount, 1, "ケース再オープン件数")
+				assertEqualInt64(t, reAlertCount, 1, "ケース再検知件数")
+			}
+		}
+		if err := rows.Err(); err != nil {
+			t.Fatalf("再オープン再検知ケース集計の走査中に失敗しました: %v", err)
+		}
+		if !found {
+			t.Fatal("再オープン再検知ケース集計に挿入したケース行が見つかりませんでした")
+		}
+	})
+}
+
+func TestBalanceGapRootCauseBreakdown(t *testing.T) {
+	t.Run("残高差分主因内訳_最大影響要因と件数を返す", func(t *testing.T) {
+		ctx, tx, masters := setupTest(t)
+		base := time.Date(2031, 4, 9, 9, 0, 0, 0, time.UTC)
+
+		userBuilder := testdb.NewUserBuilder().WithStatusID(masters.ActiveUserStatusID)
+		memberCode := userBuilder.MemberCode
+		userID := userBuilder.BuildForTest(t, ctx, tx)
+
+		(&testdb.FiatDepositBuilder{
+			UserID:          userID,
+			PublicHash:      "balance-breakdown-fiat-deposit",
+			CurrencyID:      masters.JPYCurrencyID,
+			Amount:          "1200000",
+			DepositStatusID: masters.CompletedDepositStatusID,
+			RequestedAt:     base,
+			CompletedAt:     sql.NullTime{Time: base.Add(5 * time.Minute), Valid: true},
+		}).BuildForTest(t, ctx, tx)
+
+		orderID := (&testdb.TradingOrderBuilder{
+			UserID:         userID,
+			PublicHash:     "balance-breakdown-order",
+			Side:           "BUY",
+			OrderType:      "LIMIT",
+			FromCurrencyID: masters.JPYCurrencyID,
+			ToCurrencyID:   masters.BTCurrencyID,
+			Price:          "500000",
+			Quantity:       "1.00000000",
+			OrderStatusID:  masters.FilledOrderStatusID,
+			PlacedAt:       base.Add(10 * time.Minute),
+		}).BuildForTest(t, ctx, tx)
+		(&testdb.TradeExecutionBuilder{
+			OrderID:          orderID,
+			UserID:           userID,
+			PublicHash:       "balance-breakdown-execution",
+			FromCurrencyID:   masters.JPYCurrencyID,
+			ToCurrencyID:     masters.BTCurrencyID,
+			ExecutedPrice:    "500000",
+			ExecutedQuantity: "1.00000000",
+			FromAmount:       "500000.00000000",
+			ToAmount:         "1.00000000",
+			FeeCurrencyID:    masters.JPYCurrencyID,
+			FeeAmount:        "500",
+			ExecutedAt:       base.Add(15 * time.Minute),
+		}).BuildForTest(t, ctx, tx)
+
+		rows := queryRows(t, ctx, tx, "examples/balance_gap_root_cause_breakdown.sql")
+		defer rows.Close()
+
+		var found bool
+		for rows.Next() {
+			var (
+				userIDGot               int64
+				memberCodeGot           string
+				currencyCode            string
+				totalEventCount         int64
+				externalNetAmount       string
+				tradeNetAmount          string
+				feeAmount               string
+				theoreticalBalanceDelta string
+				maxExternalImpact       string
+				maxTradeImpact          string
+				maxFeeImpact            string
+				dominantCause           string
+			)
+			if err := rows.Scan(&userIDGot, &memberCodeGot, &currencyCode, &totalEventCount, &externalNetAmount, &tradeNetAmount, &feeAmount, &theoreticalBalanceDelta, &maxExternalImpact, &maxTradeImpact, &maxFeeImpact, &dominantCause); err != nil {
+				t.Fatalf("残高差分主因内訳の行読み取りに失敗しました: %v", err)
+			}
+			if userIDGot == userID && currencyCode == "JPY" {
+				found = true
+				if memberCodeGot != memberCode {
+					t.Fatalf("残高差分主因内訳の会員コードが期待値と異なります: expected=%s actual=%s", memberCode, memberCodeGot)
+				}
+				assertEqualInt64(t, totalEventCount, 3, "残高差分主因内訳のイベント件数")
+				if externalNetAmount != "1200000.000000000000000000" || tradeNetAmount != "-500000.000000000000000000" || feeAmount != "500.000000000000000000" || theoreticalBalanceDelta != "699500.000000000000000000" {
+					t.Fatalf("残高差分主因内訳の差分値が期待値と異なります: external=%s trade=%s fee=%s delta=%s", externalNetAmount, tradeNetAmount, feeAmount, theoreticalBalanceDelta)
+				}
+				if maxExternalImpact != "1200000.000000000000000000" || maxTradeImpact != "500000.000000000000000000" || maxFeeImpact != "500.000000000000000000" || dominantCause != "EXTERNAL_FLOW" {
+					t.Fatalf("残高差分主因内訳の主因判定が期待値と異なります: external=%s trade=%s fee=%s cause=%s", maxExternalImpact, maxTradeImpact, maxFeeImpact, dominantCause)
+				}
+			}
+		}
+		if err := rows.Err(); err != nil {
+			t.Fatalf("残高差分主因内訳の走査中に失敗しました: %v", err)
+		}
+		if !found {
+			t.Fatal("残高差分主因内訳に挿入したJPY行が見つかりませんでした")
+		}
+	})
+}
+
+func TestStuckCaseQueue(t *testing.T) {
+	t.Run("滞留ケースキュー_長時間動いていないケースを返す", func(t *testing.T) {
+		ctx, tx, masters := setupTest(t)
+		now := currentDBTime(t, ctx, tx)
+
+		userBuilder := testdb.NewUserBuilder().WithStatusID(masters.ActiveUserStatusID)
+		memberCode := userBuilder.MemberCode
+		userID := userBuilder.BuildForTest(t, ctx, tx)
+
+		caseID := (&testdb.SuspiciousCaseBuilder{
+			UserID:          userID,
+			PublicCaseHash:  "6363636363636363636363636363636363636363636363636363636363636363",
+			OpenedByTypeID:  masters.SystemActorTypeID,
+			OpenedByID:      "stuck-case-batch",
+			SourceTypeID:    masters.AutoCaseSourceTypeID,
+			Title:           "stuck-case",
+			CurrentStatusID: masters.ActionRequiredCaseStatusID,
+			RiskLevelID:     masters.CriticalRiskLevelID,
+			AssignedTo:      sql.NullString{String: "aml-stuck-owner", Valid: true},
+			OpenedAt:        now.Add(-96 * time.Hour),
+		}).BuildForTest(t, ctx, tx)
+
+		(&testdb.CaseStatusHistoryBuilder{
+			CaseID:       caseID,
+			FromStatusID: sql.NullInt64{Int64: masters.OpenCaseStatusID, Valid: true},
+			ToStatusID:   masters.ActionRequiredCaseStatusID,
+			ActorTypeID:  masters.AdminActorTypeID,
+			ActorID:      "stuck-case-admin",
+			Reason:       "need action",
+			ChangedAt:    now.Add(-72 * time.Hour),
+		}).BuildForTest(t, ctx, tx)
+
+		rows := queryRows(t, ctx, tx, "examples/stuck_case_queue.sql")
+		defer rows.Close()
+
+		var found bool
+		for rows.Next() {
+			var (
+				suspiciousCaseID  int64
+				userIDGot         int64
+				memberCodeGot     string
+				title             string
+				currentCaseStatus string
+				riskLevel         string
+				assignedTo        sql.NullString
+				lastActivityAt    time.Time
+				pendingCaseMins   int64
+			)
+			if err := rows.Scan(&suspiciousCaseID, &userIDGot, &memberCodeGot, &title, &currentCaseStatus, &riskLevel, &assignedTo, &lastActivityAt, &pendingCaseMins); err != nil {
+				t.Fatalf("滞留ケースキューの行読み取りに失敗しました: %v", err)
+			}
+			_ = lastActivityAt
+			if suspiciousCaseID == caseID {
+				found = true
+				if userIDGot != userID || memberCodeGot != memberCode || title != "stuck-case" || currentCaseStatus != "ACTION_REQUIRED" || riskLevel != "CRITICAL" {
+					t.Fatalf("滞留ケースキューの属性が期待値と異なります: user=%d member=%s title=%s status=%s risk=%s", userIDGot, memberCodeGot, title, currentCaseStatus, riskLevel)
+				}
+				if !assignedTo.Valid || assignedTo.String != "aml-stuck-owner" {
+					t.Fatalf("滞留ケースキューの担当者が期待値と異なります: actual=%v", assignedTo)
+				}
+				assertGreaterOrEqualInt64(t, pendingCaseMins, 48*60, "滞留ケースキューの滞留分数")
+			}
+		}
+		if err := rows.Err(); err != nil {
+			t.Fatalf("滞留ケースキューの走査中に失敗しました: %v", err)
+		}
+		if !found {
+			t.Fatal("滞留ケースキューに挿入したケース行が見つかりませんでした")
 		}
 	})
 }

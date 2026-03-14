@@ -13,68 +13,70 @@ type testHelper interface {
 }
 
 type MasterData struct {
-	ActiveUserStatusID        int64
-	FrozenUserStatusID        int64
-	PendingDepositStatusID    int64
-	CompletedDepositStatusID  int64
-	FailedDepositStatusID     int64
-	PendingWithdrawalID       int64
-	CompletedWithdrawalID     int64
-	FailedWithdrawalID        int64
-	FilledOrderStatusID       int64
-	OpenOrderStatusID         int64
-	SystemActorTypeID         int64
-	AdminActorTypeID          int64
-	AutoCaseSourceTypeID      int64
-	OpenCaseStatusID          int64
-	InvestigatingCaseStatusID int64
-	ClosedCaseStatusID        int64
-	HighRiskLevelID           int64
-	CriticalRiskLevelID       int64
-	OpenAlertStatusID         int64
-	ReviewedAlertStatusID     int64
-	FreezeActionTypeID        int64
-	FrozenEventTypeID         int64
-	JPYCurrencyID             int64
-	BTCurrencyID              int64
-	ETHCurrencyID             int64
-	XRPCurrencyID             int64
-	OccupationOtherID         int64
-	IncomeMidID               int64
-	AssetMidID                int64
+	ActiveUserStatusID         int64
+	FrozenUserStatusID         int64
+	PendingDepositStatusID     int64
+	CompletedDepositStatusID   int64
+	FailedDepositStatusID      int64
+	PendingWithdrawalID        int64
+	CompletedWithdrawalID      int64
+	FailedWithdrawalID         int64
+	FilledOrderStatusID        int64
+	OpenOrderStatusID          int64
+	SystemActorTypeID          int64
+	AdminActorTypeID           int64
+	AutoCaseSourceTypeID       int64
+	OpenCaseStatusID           int64
+	InvestigatingCaseStatusID  int64
+	ActionRequiredCaseStatusID int64
+	ClosedCaseStatusID         int64
+	HighRiskLevelID            int64
+	CriticalRiskLevelID        int64
+	OpenAlertStatusID          int64
+	ReviewedAlertStatusID      int64
+	FreezeActionTypeID         int64
+	FrozenEventTypeID          int64
+	JPYCurrencyID              int64
+	BTCurrencyID               int64
+	ETHCurrencyID              int64
+	XRPCurrencyID              int64
+	OccupationOtherID          int64
+	IncomeMidID                int64
+	AssetMidID                 int64
 }
 
 func LoadMasterData(ctx context.Context, tx *sql.Tx) MasterData {
 	return MasterData{
-		ActiveUserStatusID:        mustLookupID(ctx, tx, "SELECT id FROM user_statuses WHERE value = 'ACTIVE' LIMIT 1"),
-		FrozenUserStatusID:        mustLookupID(ctx, tx, "SELECT id FROM user_statuses WHERE value = 'FROZEN' LIMIT 1"),
-		PendingDepositStatusID:    mustLookupID(ctx, tx, "SELECT id FROM deposit_statuses WHERE value = 'PENDING' LIMIT 1"),
-		CompletedDepositStatusID:  mustLookupID(ctx, tx, "SELECT id FROM deposit_statuses WHERE value = 'COMPLETED' LIMIT 1"),
-		FailedDepositStatusID:     mustLookupID(ctx, tx, "SELECT id FROM deposit_statuses WHERE value = 'FAILED' LIMIT 1"),
-		PendingWithdrawalID:       mustLookupID(ctx, tx, "SELECT id FROM withdrawal_statuses WHERE value = 'PENDING' LIMIT 1"),
-		CompletedWithdrawalID:     mustLookupID(ctx, tx, "SELECT id FROM withdrawal_statuses WHERE value = 'COMPLETED' LIMIT 1"),
-		FailedWithdrawalID:        mustLookupID(ctx, tx, "SELECT id FROM withdrawal_statuses WHERE value = 'FAILED' LIMIT 1"),
-		FilledOrderStatusID:       mustLookupID(ctx, tx, "SELECT id FROM order_statuses WHERE value = 'FILLED' LIMIT 1"),
-		OpenOrderStatusID:         mustLookupID(ctx, tx, "SELECT id FROM order_statuses WHERE value = 'OPEN' LIMIT 1"),
-		SystemActorTypeID:         mustLookupID(ctx, tx, "SELECT id FROM actor_types WHERE value = 'SYSTEM' LIMIT 1"),
-		AdminActorTypeID:          mustLookupID(ctx, tx, "SELECT id FROM actor_types WHERE value = 'ADMIN' LIMIT 1"),
-		AutoCaseSourceTypeID:      mustLookupID(ctx, tx, "SELECT id FROM case_source_types WHERE value = 'AUTO' LIMIT 1"),
-		OpenCaseStatusID:          mustLookupID(ctx, tx, "SELECT id FROM case_statuses WHERE value = 'OPEN' LIMIT 1"),
-		InvestigatingCaseStatusID: mustLookupID(ctx, tx, "SELECT id FROM case_statuses WHERE value = 'INVESTIGATING' LIMIT 1"),
-		ClosedCaseStatusID:        mustLookupID(ctx, tx, "SELECT id FROM case_statuses WHERE value = 'CLOSED' LIMIT 1"),
-		HighRiskLevelID:           mustLookupID(ctx, tx, "SELECT id FROM risk_levels WHERE value = 'HIGH' LIMIT 1"),
-		CriticalRiskLevelID:       mustLookupID(ctx, tx, "SELECT id FROM risk_levels WHERE value = 'CRITICAL' LIMIT 1"),
-		OpenAlertStatusID:         mustLookupID(ctx, tx, "SELECT id FROM alert_event_statuses WHERE value = 'OPEN' LIMIT 1"),
-		ReviewedAlertStatusID:     mustLookupID(ctx, tx, "SELECT id FROM alert_event_statuses WHERE value = 'REVIEWED' LIMIT 1"),
-		FreezeActionTypeID:        mustLookupID(ctx, tx, "SELECT id FROM account_action_types WHERE value = 'FREEZE' LIMIT 1"),
-		FrozenEventTypeID:         mustLookupID(ctx, tx, "SELECT id FROM user_status_event_types WHERE value = 'FROZEN' LIMIT 1"),
-		JPYCurrencyID:             mustLookupID(ctx, tx, "SELECT id FROM currencies WHERE code = 'JPY' LIMIT 1"),
-		BTCurrencyID:              mustLookupID(ctx, tx, "SELECT id FROM currencies WHERE code = 'BTC' LIMIT 1"),
-		ETHCurrencyID:             mustLookupID(ctx, tx, "SELECT id FROM currencies WHERE code = 'ETH' LIMIT 1"),
-		XRPCurrencyID:             mustLookupID(ctx, tx, "SELECT id FROM currencies WHERE code = 'XRP' LIMIT 1"),
-		OccupationOtherID:         mustLookupID(ctx, tx, "SELECT id FROM occupations WHERE value = 'OTHER' LIMIT 1"),
-		IncomeMidID:               mustLookupID(ctx, tx, "SELECT id FROM annual_income_brackets WHERE value = '5M_TO_7M' LIMIT 1"),
-		AssetMidID:                mustLookupID(ctx, tx, "SELECT id FROM financial_asset_brackets WHERE value = '5M_TO_10M' LIMIT 1"),
+		ActiveUserStatusID:         mustLookupID(ctx, tx, "SELECT id FROM user_statuses WHERE value = 'ACTIVE' LIMIT 1"),
+		FrozenUserStatusID:         mustLookupID(ctx, tx, "SELECT id FROM user_statuses WHERE value = 'FROZEN' LIMIT 1"),
+		PendingDepositStatusID:     mustLookupID(ctx, tx, "SELECT id FROM deposit_statuses WHERE value = 'PENDING' LIMIT 1"),
+		CompletedDepositStatusID:   mustLookupID(ctx, tx, "SELECT id FROM deposit_statuses WHERE value = 'COMPLETED' LIMIT 1"),
+		FailedDepositStatusID:      mustLookupID(ctx, tx, "SELECT id FROM deposit_statuses WHERE value = 'FAILED' LIMIT 1"),
+		PendingWithdrawalID:        mustLookupID(ctx, tx, "SELECT id FROM withdrawal_statuses WHERE value = 'PENDING' LIMIT 1"),
+		CompletedWithdrawalID:      mustLookupID(ctx, tx, "SELECT id FROM withdrawal_statuses WHERE value = 'COMPLETED' LIMIT 1"),
+		FailedWithdrawalID:         mustLookupID(ctx, tx, "SELECT id FROM withdrawal_statuses WHERE value = 'FAILED' LIMIT 1"),
+		FilledOrderStatusID:        mustLookupID(ctx, tx, "SELECT id FROM order_statuses WHERE value = 'FILLED' LIMIT 1"),
+		OpenOrderStatusID:          mustLookupID(ctx, tx, "SELECT id FROM order_statuses WHERE value = 'OPEN' LIMIT 1"),
+		SystemActorTypeID:          mustLookupID(ctx, tx, "SELECT id FROM actor_types WHERE value = 'SYSTEM' LIMIT 1"),
+		AdminActorTypeID:           mustLookupID(ctx, tx, "SELECT id FROM actor_types WHERE value = 'ADMIN' LIMIT 1"),
+		AutoCaseSourceTypeID:       mustLookupID(ctx, tx, "SELECT id FROM case_source_types WHERE value = 'AUTO' LIMIT 1"),
+		OpenCaseStatusID:           mustLookupID(ctx, tx, "SELECT id FROM case_statuses WHERE value = 'OPEN' LIMIT 1"),
+		InvestigatingCaseStatusID:  mustLookupID(ctx, tx, "SELECT id FROM case_statuses WHERE value = 'INVESTIGATING' LIMIT 1"),
+		ActionRequiredCaseStatusID: mustLookupID(ctx, tx, "SELECT id FROM case_statuses WHERE value = 'ACTION_REQUIRED' LIMIT 1"),
+		ClosedCaseStatusID:         mustLookupID(ctx, tx, "SELECT id FROM case_statuses WHERE value = 'CLOSED' LIMIT 1"),
+		HighRiskLevelID:            mustLookupID(ctx, tx, "SELECT id FROM risk_levels WHERE value = 'HIGH' LIMIT 1"),
+		CriticalRiskLevelID:        mustLookupID(ctx, tx, "SELECT id FROM risk_levels WHERE value = 'CRITICAL' LIMIT 1"),
+		OpenAlertStatusID:          mustLookupID(ctx, tx, "SELECT id FROM alert_event_statuses WHERE value = 'OPEN' LIMIT 1"),
+		ReviewedAlertStatusID:      mustLookupID(ctx, tx, "SELECT id FROM alert_event_statuses WHERE value = 'REVIEWED' LIMIT 1"),
+		FreezeActionTypeID:         mustLookupID(ctx, tx, "SELECT id FROM account_action_types WHERE value = 'FREEZE' LIMIT 1"),
+		FrozenEventTypeID:          mustLookupID(ctx, tx, "SELECT id FROM user_status_event_types WHERE value = 'FROZEN' LIMIT 1"),
+		JPYCurrencyID:              mustLookupID(ctx, tx, "SELECT id FROM currencies WHERE code = 'JPY' LIMIT 1"),
+		BTCurrencyID:               mustLookupID(ctx, tx, "SELECT id FROM currencies WHERE code = 'BTC' LIMIT 1"),
+		ETHCurrencyID:              mustLookupID(ctx, tx, "SELECT id FROM currencies WHERE code = 'ETH' LIMIT 1"),
+		XRPCurrencyID:              mustLookupID(ctx, tx, "SELECT id FROM currencies WHERE code = 'XRP' LIMIT 1"),
+		OccupationOtherID:          mustLookupID(ctx, tx, "SELECT id FROM occupations WHERE value = 'OTHER' LIMIT 1"),
+		IncomeMidID:                mustLookupID(ctx, tx, "SELECT id FROM annual_income_brackets WHERE value = '5M_TO_7M' LIMIT 1"),
+		AssetMidID:                 mustLookupID(ctx, tx, "SELECT id FROM financial_asset_brackets WHERE value = '5M_TO_10M' LIMIT 1"),
 	}
 }
 
@@ -954,6 +956,63 @@ func (b *AccountActionBuilder) Build(ctx context.Context, tx *sql.Tx) int64 {
 }
 
 func (b *AccountActionBuilder) BuildForTest(t testHelper, ctx context.Context, tx *sql.Tx) (id int64) {
+	t.Helper()
+
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			t.Fatalf("%v", recovered)
+		}
+	}()
+
+	return b.Build(ctx, tx)
+}
+
+type CaseStatusHistoryBuilder struct {
+	CaseID       int64
+	FromStatusID sql.NullInt64
+	ToStatusID   int64
+	ActorTypeID  int64
+	ActorID      string
+	Reason       string
+	ChangedAt    time.Time
+}
+
+func NewCaseStatusHistoryBuilder() *CaseStatusHistoryBuilder {
+	now := time.Now().UTC()
+	return &CaseStatusHistoryBuilder{
+		ActorID:   "integration-test",
+		Reason:    "integration test case status change",
+		ChangedAt: now,
+	}
+}
+
+func (b *CaseStatusHistoryBuilder) Build(ctx context.Context, tx *sql.Tx) int64 {
+	result, err := tx.ExecContext(
+		ctx,
+		`INSERT INTO case_status_histories (
+			case_id, from_status_id, to_status_id, actor_type_id, actor_id, reason, changed_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		b.CaseID,
+		b.FromStatusID,
+		b.ToStatusID,
+		b.ActorTypeID,
+		b.ActorID,
+		b.Reason,
+		b.ChangedAt,
+	)
+	if err != nil {
+		panic(fmt.Sprintf("ケースステータス履歴のテストデータ作成に失敗しました: %v", err))
+	}
+
+	id, err := result.LastInsertId()
+	if err != nil {
+		panic(fmt.Sprintf("ケースステータス履歴IDの取得に失敗しました: %v", err))
+	}
+
+	return id
+}
+
+func (b *CaseStatusHistoryBuilder) BuildForTest(t testHelper, ctx context.Context, tx *sql.Tx) (id int64) {
 	t.Helper()
 
 	defer func() {
