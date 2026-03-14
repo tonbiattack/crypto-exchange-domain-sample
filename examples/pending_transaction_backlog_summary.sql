@@ -11,6 +11,11 @@ USE exchange_domain;
   - backlog_bucket は滞留帯で、
     UNDER_1_HOUR / UNDER_24_HOURS / OVER_24_HOURS に分類する。
   - backlog_count が多く、max_pending_minutes が大きい帯ほど運用優先度が高い。
+
+  実装上の注意:
+  - バックログの集計までは SQL が向いているが、
+    通知閾値判定、担当チームへの振り分け、再試行制御まで含めると
+    アプリケーション側の方が責務分離しやすい。
 */
 WITH pending_transactions AS (
   -- 法定入金の処理中案件。

@@ -18,6 +18,8 @@ const (
 
 var useStatementPattern = regexp.MustCompile(`(?im)^\s*USE\s+exchange_domain\s*;\s*`)
 
+const proceduralResultMarker = "-- RESULT_QUERY"
+
 func Open(t *testing.T) *sql.DB {
 	t.Helper()
 
@@ -64,4 +66,14 @@ func NormalizeSQL(raw string) string {
 	trimmed := strings.TrimSpace(raw)
 	trimmed = useStatementPattern.ReplaceAllString(trimmed, "")
 	return strings.TrimSpace(trimmed)
+}
+
+func SplitProceduralSQL(raw string) (setup string, resultQuery string) {
+	normalized := NormalizeSQL(raw)
+	parts := strings.SplitN(normalized, proceduralResultMarker, 2)
+	if len(parts) == 1 {
+		return "", normalized
+	}
+
+	return strings.TrimSpace(parts[0]), strings.TrimSpace(parts[1])
 }

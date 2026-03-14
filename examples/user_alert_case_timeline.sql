@@ -12,6 +12,13 @@ USE exchange_domain;
   - たとえば同一ユーザーで
     ALERT_DETECTED -> CASE_OPENED -> ACCOUNT_ACTION -> USER_STATUS_CHANGED
     の順に並べば、検知から措置までの流れがそのまま追える。
+
+  実装上の注意:
+  - タイムライン表示用の一覧化は SQL が得意だが、
+    「同種イベントのグルーピング」「画面表示向けの折りたたみ」「差分ハイライト」まで
+    1本のSQLでやり切ると可読性が落ちやすい。
+  - UI向けの整形やイベント統合ルールは、
+    手続き型コード側で組み立てる前提にした方が保守しやすい。
 */
 WITH timeline_events AS (
   -- 自動検知イベント。

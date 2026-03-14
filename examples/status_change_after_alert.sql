@@ -9,6 +9,13 @@ USE exchange_domain;
   - alert_event_logs.detected_at 以降 72時間以内の user_status_change_events を結び付ける。
   - delay_minutes は検知から状態変更イベントまでの経過分。
   - user_status_histories があれば、ACTIVE -> FROZEN のような遷移前後も見られる。
+
+  実装上の注意:
+  - 「検知後に状態変更が起きたか」の追跡までは SQL で十分だが、
+    複数アラートの因果関係整理、措置責任者の特定、監査レポート生成まで
+    1本のSQLで持つのは重い。
+  - 監査証跡の説明文生成やワークフロー判定は、
+    手続き型コード側へ分けた方が変更に強い。
 */
 SELECT
   -- どのアラートを起点にした措置か。

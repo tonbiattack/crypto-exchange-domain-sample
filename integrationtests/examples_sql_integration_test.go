@@ -2521,6 +2521,584 @@ func TestPendingTransactionBacklogSummary(t *testing.T) {
 	})
 }
 
+func TestSuspiciousRapidOutflowCandidatesProcedural(t *testing.T) {
+	t.Run("疑わしい取引手続き版_急速出金候補に優先度と理由を付けて返す", func(t *testing.T) {
+		ctx, tx, masters := setupTest(t)
+
+		userID := testdb.NewUserBuilder().
+			WithStatusID(masters.ActiveUserStatusID).
+			BuildForTest(t, ctx, tx)
+
+		depositCompletedAt := time.Date(2031, 4, 1, 9, 5, 0, 0, time.UTC)
+		depositID := (&testdb.FiatDepositBuilder{
+			UserID:          userID,
+			PublicHash:      "rapid-outflow-procedural-deposit-test",
+			CurrencyID:      masters.JPYCurrencyID,
+			Amount:          "1000000",
+			DepositStatusID: masters.CompletedDepositStatusID,
+			RequestedAt:     depositCompletedAt.Add(-5 * time.Minute),
+			CompletedAt:     sql.NullTime{Time: depositCompletedAt, Valid: true},
+		}).BuildForTest(t, ctx, tx)
+
+		(&testdb.FiatWithdrawalBuilder{
+			UserID:             userID,
+			PublicHash:         "rapid-outflow-procedural-withdrawal-test",
+			CurrencyID:         masters.JPYCurrencyID,
+			Amount:             "970000",
+			WithdrawalStatusID: masters.CompletedWithdrawalID,
+			RequestedAt:        depositCompletedAt.Add(2 * time.Hour),
+			CompletedAt:        sql.NullTime{Time: depositCompletedAt.Add(2*time.Hour + 15*time.Minute), Valid: true},
+		}).BuildForTest(t, ctx, tx)
+
+		rows := queryRows(t, ctx, tx, "examples/suspicious_rapid_outflow_candidates_procedural.sql")
+		defer rows.Close()
+
+		var found bool
+		for rows.Next() {
+			var (
+				userIDGot            int64
+				memberCode           string
+				currencyCode         string
+				inflowType           string
+				inflowID             int64
+				inflowCompletedAtGot time.Time
+				inflowAmount         string
+				matchedCount         int64
+				matchedAmount        string
+				outflowRatio         string
+				reviewPriority       string
+				reviewReason         string
+			)
+			if err := rows.Scan(
+				&userIDGot,
+				&memberCode,
+				&currencyCode,
+				&inflowType,
+				&inflowID,
+				&inflowCompletedAtGot,
+				&inflowAmount,
+				&matchedCount,
+				&matchedAmount,
+				&outflowRatio,
+				&reviewPriority,
+				&reviewReason,
+			); err != nil {
+				t.Fatalf("疑わしい取引手続き版の行読み取りに失敗しました: %v", err)
+			}
+			_ = memberCode
+			_ = inflowCompletedAtGot
+			_ = inflowAmount
+			_ = matchedAmount
+			if userIDGot == userID {
+				found = true
+				if currencyCode != "JPY" || inflowType != "FIAT_DEPOSIT" || inflowID != depositID {
+					t.Fatalf("疑わしい取引手続き版のキー項目が期待値と異なります: currency=%s inflowType=%s inflowID=%d", currencyCode, inflowType, inflowID)
+				}
+				assertEqualInt64(t, matchedCount, 1, "手続き版の対応する出金件数")
+				if outflowRatio != "0.9700" || reviewPriority != "CRITICAL" {
+					t.Fatalf("疑わしい取引手続き版の判定結果が期待値と異なります: ratio=%s priority=%s", outflowRatio, reviewPriority)
+				}
+				if reviewReason != "入金の95%以上が24時間以内に流出" {
+					t.Fatalf("疑わしい取引手続き版の理由が期待値と異なります: actual=%s", reviewReason)
+				}
+			}
+		}
+		if err := rows.Err(); err != nil {
+			t.Fatalf("疑わしい取引手続き版の走査中に失敗しました: %v", err)
+		}
+		if !found {
+			t.Fatal("疑わしい取引手続き版に挿入した行が見つかりませんでした")
+		}
+	})
+}
+
+func TestUserBalanceReconciliationGapProcedural(t *testing.T) {
+	t.Run("残高整合性確認手続き版_重要度と調査要否を付けて返す", func(t *testing.T) {
+		ctx, tx, masters := setupTest(t)
+		base := time.Date(2031, 4, 2, 9, 0, 0, 0, time.UTC)
+
+		userBuilder := testdb.NewUserBuilder().WithStatusID(masters.ActiveUserStatusID)
+		memberCode := userBuilder.MemberCode
+		userID := userBuilder.BuildForTest(t, ctx, tx)
+
+		(&testdb.FiatDepositBuilder{
+			UserID:          userID,
+			PublicHash:      "balance-gap-procedural-fiat-deposit",
+			CurrencyID:      masters.JPYCurrencyID,
+			Amount:          "1000000",
+			DepositStatusID: masters.CompletedDepositStatusID,
+			RequestedAt:     base,
+			CompletedAt:     sql.NullTime{Time: base.Add(5 * time.Minute), Valid: true},
+		}).BuildForTest(t, ctx, tx)
+
+		orderID := (&testdb.TradingOrderBuilder{
+			UserID:         userID,
+			PublicHash:     "balance-gap-procedural-order",
+			Side:           "BUY",
+			OrderType:      "LIMIT",
+			FromCurrencyID: masters.JPYCurrencyID,
+			ToCurrencyID:   masters.BTCurrencyID,
+			Price:          "500000",
+			Quantity:       "1.00000000",
+			OrderStatusID:  masters.FilledOrderStatusID,
+			PlacedAt:       base.Add(10 * time.Minute),
+		}).BuildForTest(t, ctx, tx)
+
+		(&testdb.TradeExecutionBuilder{
+			OrderID:          orderID,
+			UserID:           userID,
+			PublicHash:       "balance-gap-procedural-execution",
+			FromCurrencyID:   masters.JPYCurrencyID,
+			ToCurrencyID:     masters.BTCurrencyID,
+			ExecutedPrice:    "500000",
+			ExecutedQuantity: "1.00000000",
+			FromAmount:       "500000.00000000",
+			ToAmount:         "1.00000000",
+			FeeCurrencyID:    masters.JPYCurrencyID,
+			FeeAmount:        "1000",
+			ExecutedAt:       base.Add(15 * time.Minute),
+		}).BuildForTest(t, ctx, tx)
+
+		rows := queryRows(t, ctx, tx, "examples/user_balance_reconciliation_gap_procedural.sql")
+		defer rows.Close()
+
+		var foundJPY bool
+		var foundBTC bool
+		for rows.Next() {
+			var (
+				userIDGot               int64
+				memberCodeGot           string
+				currencyCode            string
+				firstEventAt            time.Time
+				lastEventAt             time.Time
+				externalNetAmount       string
+				tradeNetAmount          string
+				feeAmount               string
+				theoreticalBalanceDelta string
+				severityLabel           string
+				needsInvestigation      int64
+			)
+			if err := rows.Scan(&userIDGot, &memberCodeGot, &currencyCode, &firstEventAt, &lastEventAt, &externalNetAmount, &tradeNetAmount, &feeAmount, &theoreticalBalanceDelta, &severityLabel, &needsInvestigation); err != nil {
+				t.Fatalf("残高整合性確認手続き版の行読み取りに失敗しました: %v", err)
+			}
+			_ = firstEventAt
+			_ = lastEventAt
+			if userIDGot != userID {
+				continue
+			}
+			if memberCodeGot != memberCode {
+				t.Fatalf("残高整合性確認手続き版の会員コードが期待値と異なります: expected=%s actual=%s", memberCode, memberCodeGot)
+			}
+			if currencyCode == "JPY" {
+				foundJPY = true
+				if externalNetAmount != "1000000.000000000000000000" || tradeNetAmount != "-500000.000000000000000000" || feeAmount != "1000.000000000000000000" || theoreticalBalanceDelta != "499000.000000000000000000" {
+					t.Fatalf("残高整合性確認手続き版のJPY差分が期待値と異なります: external=%s trade=%s fee=%s delta=%s", externalNetAmount, tradeNetAmount, feeAmount, theoreticalBalanceDelta)
+				}
+				if severityLabel != "HIGH" || needsInvestigation != 1 {
+					t.Fatalf("残高整合性確認手続き版のJPY判定が期待値と異なります: severity=%s needs=%d", severityLabel, needsInvestigation)
+				}
+			}
+			if currencyCode == "BTC" {
+				foundBTC = true
+				if theoreticalBalanceDelta != "1.000000000000000000" || severityLabel != "NORMAL" || needsInvestigation != 0 {
+					t.Fatalf("残高整合性確認手続き版のBTC判定が期待値と異なります: delta=%s severity=%s needs=%d", theoreticalBalanceDelta, severityLabel, needsInvestigation)
+				}
+			}
+		}
+		if err := rows.Err(); err != nil {
+			t.Fatalf("残高整合性確認手続き版の走査中に失敗しました: %v", err)
+		}
+		if !foundJPY || !foundBTC {
+			t.Fatalf("残高整合性確認手続き版に期待した通貨行が見つかりませんでした: jpy=%t btc=%t", foundJPY, foundBTC)
+		}
+	})
+}
+
+func TestStatusChangeAfterAlertProcedural(t *testing.T) {
+	t.Run("アラート後ステータス変更手続き版_最初の措置と応答帯を返す", func(t *testing.T) {
+		ctx, tx, masters := setupTest(t)
+		base := time.Date(2031, 4, 3, 9, 0, 0, 0, time.UTC)
+
+		userBuilder := testdb.NewUserBuilder().WithStatusID(masters.ActiveUserStatusID)
+		memberCode := userBuilder.MemberCode
+		userID := userBuilder.BuildForTest(t, ctx, tx)
+
+		withdrawalID := (&testdb.FiatWithdrawalBuilder{
+			UserID:             userID,
+			PublicHash:         "status-change-after-alert-procedural-withdrawal",
+			CurrencyID:         masters.JPYCurrencyID,
+			Amount:             "700000",
+			WithdrawalStatusID: masters.CompletedWithdrawalID,
+			RequestedAt:        base,
+			CompletedAt:        sql.NullTime{Time: base.Add(10 * time.Minute), Valid: true},
+		}).BuildForTest(t, ctx, tx)
+		ruleID := (&testdb.AlertRuleBuilder{
+			PublicRuleHash: "8181818181818181818181818181818181818181818181818181818181818181",
+			RuleName:       "Status Change After Alert Procedural Rule",
+			RuleType:       "STATUS_AFTER_ALERT_PROCEDURAL",
+			Severity:       "CRITICAL",
+			ThresholdJSON:  `{"sample":true}`,
+		}).BuildForTest(t, ctx, tx)
+		detectedAt := base.Add(15 * time.Minute)
+		(&testdb.AlertEventLogBuilder{
+			UserID:             userID,
+			RuleID:             ruleID,
+			AlertEventStatusID: masters.OpenAlertStatusID,
+			FiatWithdrawalID:   withdrawalID,
+			TradeExecutionID:   sql.NullInt64{},
+			Score:              "95.0000",
+			DetectedAt:         detectedAt,
+			Note:               "status-change-after-alert-procedural",
+		}).BuildForTest(t, ctx, tx)
+		firstStatusEventID := (&testdb.UserStatusChangeEventBuilder{
+			UserID:      userID,
+			EventTypeID: masters.FrozenEventTypeID,
+			ActorTypeID: masters.SystemActorTypeID,
+			ActorID:     "status-after-alert-procedural-batch-1",
+			Reason:      "first freeze after alert",
+			OccurredAt:  detectedAt.Add(20 * time.Minute),
+		}).BuildForTest(t, ctx, tx)
+		(&testdb.UserStatusHistoryBuilder{
+			UserID:              userID,
+			StatusChangeEventID: firstStatusEventID,
+			FromStatusID:        sql.NullInt64{Int64: masters.ActiveUserStatusID, Valid: true},
+			ToStatusID:          masters.FrozenUserStatusID,
+			ChangedAt:           detectedAt.Add(20 * time.Minute),
+		}).BuildForTest(t, ctx, tx)
+		secondStatusEventID := (&testdb.UserStatusChangeEventBuilder{
+			UserID:      userID,
+			EventTypeID: masters.FrozenEventTypeID,
+			ActorTypeID: masters.SystemActorTypeID,
+			ActorID:     "status-after-alert-procedural-batch-2",
+			Reason:      "second freeze after alert",
+			OccurredAt:  detectedAt.Add(3 * time.Hour),
+		}).BuildForTest(t, ctx, tx)
+		(&testdb.UserStatusHistoryBuilder{
+			UserID:              userID,
+			StatusChangeEventID: secondStatusEventID,
+			FromStatusID:        sql.NullInt64{Int64: masters.FrozenUserStatusID, Valid: true},
+			ToStatusID:          masters.FrozenUserStatusID,
+			ChangedAt:           detectedAt.Add(3 * time.Hour),
+		}).BuildForTest(t, ctx, tx)
+
+		rows := queryRows(t, ctx, tx, "examples/status_change_after_alert_procedural.sql")
+		defer rows.Close()
+
+		var found bool
+		for rows.Next() {
+			var (
+				alertEventID    int64
+				userIDGot       int64
+				memberCodeGot   string
+				ruleName        string
+				detectedAtGot   time.Time
+				statusEventType string
+				fromStatus      sql.NullString
+				toStatus        sql.NullString
+				reason          string
+				statusChangedAt time.Time
+				delayMinutes    int64
+				linkedEventRank int64
+				responseBucket  string
+			)
+			if err := rows.Scan(&alertEventID, &userIDGot, &memberCodeGot, &ruleName, &detectedAtGot, &statusEventType, &fromStatus, &toStatus, &reason, &statusChangedAt, &delayMinutes, &linkedEventRank, &responseBucket); err != nil {
+				t.Fatalf("アラート後ステータス変更手続き版の行読み取りに失敗しました: %v", err)
+			}
+			_ = alertEventID
+			_ = detectedAtGot
+			_ = statusChangedAt
+			if userIDGot == userID {
+				found = true
+				if memberCodeGot != memberCode || ruleName != "Status Change After Alert Procedural Rule" || statusEventType != "FROZEN" {
+					t.Fatalf("アラート後ステータス変更手続き版の属性が期待値と異なります: memberCode=%s rule=%s type=%s", memberCodeGot, ruleName, statusEventType)
+				}
+				if !fromStatus.Valid || fromStatus.String != "ACTIVE" || !toStatus.Valid || toStatus.String != "FROZEN" {
+					t.Fatalf("アラート後ステータス変更手続き版のステータス遷移が期待値と異なります: from=%v to=%v reason=%s", fromStatus, toStatus, reason)
+				}
+				assertEqualInt64(t, delayMinutes, 20, "手続き版の検知後ステータス変更までの分数")
+				assertEqualInt64(t, linkedEventRank, 1, "手続き版の採用順位")
+				if responseBucket != "WITHIN_30_MINUTES" {
+					t.Fatalf("アラート後ステータス変更手続き版の応答帯が期待値と異なります: actual=%s", responseBucket)
+				}
+			}
+		}
+		if err := rows.Err(); err != nil {
+			t.Fatalf("アラート後ステータス変更手続き版の走査中に失敗しました: %v", err)
+		}
+		if !found {
+			t.Fatal("アラート後ステータス変更手続き版に挿入した行が見つかりませんでした")
+		}
+	})
+}
+
+func TestLargeUnmatchedCryptoInflowProcedural(t *testing.T) {
+	t.Run("高額未対応暗号資産入金手続き版_優先度と理由を返す", func(t *testing.T) {
+		ctx, tx, masters := setupTest(t)
+		userBuilder := testdb.NewUserBuilder().WithStatusID(masters.ActiveUserStatusID)
+		memberCode := userBuilder.MemberCode
+		userID := userBuilder.BuildForTest(t, ctx, tx)
+		base := time.Date(2031, 4, 4, 9, 0, 0, 0, time.UTC)
+
+		cryptoDepositID := (&testdb.CryptoDepositBuilder{
+			UserID:          userID,
+			PublicHash:      "large-unmatched-crypto-procedural-deposit",
+			CurrencyID:      masters.BTCurrencyID,
+			TxHash:          "large-unmatched-crypto-procedural-deposit-tx",
+			Amount:          "5.50000000",
+			DepositStatusID: masters.CompletedDepositStatusID,
+			DetectedAt:      base,
+			ConfirmedAt:     sql.NullTime{Time: base.Add(30 * time.Minute), Valid: true},
+		}).BuildForTest(t, ctx, tx)
+
+		rows := queryRows(t, ctx, tx, "examples/large_unmatched_crypto_inflow_procedural.sql")
+		defer rows.Close()
+
+		var found bool
+		for rows.Next() {
+			var (
+				cryptoDepositIDGot        int64
+				userIDGot                 int64
+				memberCodeGot             string
+				currencyCode              string
+				amount                    string
+				confirmedAt               time.Time
+				matchedSellExecutionCount int64
+				matchedWithdrawalCount    int64
+				reviewPriority            string
+				reviewReason              string
+			)
+			if err := rows.Scan(&cryptoDepositIDGot, &userIDGot, &memberCodeGot, &currencyCode, &amount, &confirmedAt, &matchedSellExecutionCount, &matchedWithdrawalCount, &reviewPriority, &reviewReason); err != nil {
+				t.Fatalf("高額未対応暗号資産入金手続き版の行読み取りに失敗しました: %v", err)
+			}
+			_ = confirmedAt
+			if cryptoDepositIDGot == cryptoDepositID {
+				found = true
+				if userIDGot != userID || memberCodeGot != memberCode || currencyCode != "BTC" {
+					t.Fatalf("高額未対応暗号資産入金手続き版の属性が期待値と異なります: userID=%d memberCode=%s currency=%s", userIDGot, memberCodeGot, currencyCode)
+				}
+				if amount != "5.500000000000000000" {
+					t.Fatalf("高額未対応暗号資産入金手続き版の数量が期待値と異なります: actual=%s", amount)
+				}
+				assertEqualInt64(t, matchedSellExecutionCount, 0, "手続き版の対応する売却約定件数")
+				assertEqualInt64(t, matchedWithdrawalCount, 0, "手続き版の対応する出金件数")
+				if reviewPriority != "CRITICAL" || reviewReason != "超大口入金後7日以内の売却・出金なし" {
+					t.Fatalf("高額未対応暗号資産入金手続き版の判定結果が期待値と異なります: priority=%s reason=%s", reviewPriority, reviewReason)
+				}
+			}
+		}
+		if err := rows.Err(); err != nil {
+			t.Fatalf("高額未対応暗号資産入金手続き版の走査中に失敗しました: %v", err)
+		}
+		if !found {
+			t.Fatal("高額未対応暗号資産入金手続き版に挿入した入金行が見つかりませんでした")
+		}
+	})
+}
+
+func TestUserAlertCaseTimelineProcedural(t *testing.T) {
+	t.Run("ユーザーイベントタイムライン手続き版_順序番号と段階ラベルを返す", func(t *testing.T) {
+		ctx, tx, masters := setupTest(t)
+		base := time.Date(2031, 4, 5, 9, 0, 0, 0, time.UTC)
+
+		userBuilder := testdb.NewUserBuilder().WithStatusID(masters.ActiveUserStatusID)
+		memberCode := userBuilder.MemberCode
+		userID := userBuilder.BuildForTest(t, ctx, tx)
+
+		withdrawalID := (&testdb.FiatWithdrawalBuilder{
+			UserID:             userID,
+			PublicHash:         "timeline-procedural-withdrawal",
+			CurrencyID:         masters.JPYCurrencyID,
+			Amount:             "800000",
+			WithdrawalStatusID: masters.CompletedWithdrawalID,
+			RequestedAt:        base,
+			CompletedAt:        sql.NullTime{Time: base.Add(10 * time.Minute), Valid: true},
+		}).BuildForTest(t, ctx, tx)
+		ruleID := (&testdb.AlertRuleBuilder{
+			PublicRuleHash: "9292929292929292929292929292929292929292929292929292929292929292",
+			RuleName:       "Timeline Procedural Rule",
+			RuleType:       "TIMELINE_PROCEDURAL",
+			Severity:       "HIGH",
+			ThresholdJSON:  `{"sample":true}`,
+		}).BuildForTest(t, ctx, tx)
+		alertAt := base.Add(15 * time.Minute)
+		alertID := (&testdb.AlertEventLogBuilder{
+			UserID:             userID,
+			RuleID:             ruleID,
+			AlertEventStatusID: masters.OpenAlertStatusID,
+			FiatWithdrawalID:   withdrawalID,
+			TradeExecutionID:   sql.NullInt64{},
+			Score:              "88.8000",
+			DetectedAt:         alertAt,
+			Note:               "timeline-procedural-alert",
+		}).BuildForTest(t, ctx, tx)
+		caseID := (&testdb.SuspiciousCaseBuilder{
+			UserID:          userID,
+			PublicCaseHash:  "9393939393939393939393939393939393939393939393939393939393939393",
+			OpenedByTypeID:  masters.SystemActorTypeID,
+			OpenedByID:      "integration-test-runner-procedural",
+			SourceTypeID:    masters.AutoCaseSourceTypeID,
+			AlertEventLogID: sql.NullInt64{Int64: alertID, Valid: true},
+			Title:           "timeline procedural case",
+			CurrentStatusID: masters.InvestigatingCaseStatusID,
+			RiskLevelID:     masters.HighRiskLevelID,
+			AssignedTo:      sql.NullString{String: "aml-operator-timeline-procedural", Valid: true},
+			OpenedAt:        base.Add(20 * time.Minute),
+		}).BuildForTest(t, ctx, tx)
+		(&testdb.AccountActionBuilder{
+			UserID:           userID,
+			SuspiciousCaseID: sql.NullInt64{Int64: caseID, Valid: true},
+			ActionTypeID:     masters.FreezeActionTypeID,
+			ActorTypeID:      masters.AdminActorTypeID,
+			ActorID:          "timeline-procedural-admin",
+			ActionReason:     "timeline procedural freeze",
+			RequestedAt:      base.Add(25 * time.Minute),
+			CompletedAt:      sql.NullTime{Time: base.Add(30 * time.Minute), Valid: true},
+		}).BuildForTest(t, ctx, tx)
+		(&testdb.UserStatusChangeEventBuilder{
+			UserID:      userID,
+			EventTypeID: masters.FrozenEventTypeID,
+			ActorTypeID: masters.SystemActorTypeID,
+			ActorID:     "timeline-procedural-batch",
+			Reason:      "timeline procedural status change",
+			OccurredAt:  base.Add(35 * time.Minute),
+		}).BuildForTest(t, ctx, tx)
+
+		rows := queryRows(t, ctx, tx, "examples/user_alert_case_timeline_procedural.sql")
+		defer rows.Close()
+
+		foundTypes := map[string]bool{}
+		sequenceByType := map[string]int64{}
+		stageByType := map[string]string{}
+		for rows.Next() {
+			var (
+				userIDGot       int64
+				memberCodeGot   string
+				eventAt         time.Time
+				eventType       string
+				eventID         int64
+				primaryLabel    string
+				secondaryLabel  string
+				eventSequenceNo int64
+				lifecycleStage  string
+			)
+			if err := rows.Scan(&userIDGot, &memberCodeGot, &eventAt, &eventType, &eventID, &primaryLabel, &secondaryLabel, &eventSequenceNo, &lifecycleStage); err != nil {
+				t.Fatalf("ユーザーイベントタイムライン手続き版の行読み取りに失敗しました: %v", err)
+			}
+			_ = eventAt
+			_ = eventID
+			_ = primaryLabel
+			_ = secondaryLabel
+			if userIDGot == userID {
+				if memberCodeGot != memberCode {
+					t.Fatalf("ユーザーイベントタイムライン手続き版の会員コードが期待値と異なります: expected=%s actual=%s", memberCode, memberCodeGot)
+				}
+				foundTypes[eventType] = true
+				sequenceByType[eventType] = eventSequenceNo
+				stageByType[eventType] = lifecycleStage
+			}
+		}
+		if err := rows.Err(); err != nil {
+			t.Fatalf("ユーザーイベントタイムライン手続き版の走査中に失敗しました: %v", err)
+		}
+		expectedStages := map[string]string{
+			"ALERT_DETECTED":      "DETECTION",
+			"CASE_OPENED":         "CASE_MANAGEMENT",
+			"ACCOUNT_ACTION":      "ACCOUNT_CONTROL",
+			"USER_STATUS_CHANGED": "STATUS_CONTROL",
+		}
+		expectedSequence := map[string]int64{
+			"ALERT_DETECTED":      1,
+			"CASE_OPENED":         2,
+			"ACCOUNT_ACTION":      3,
+			"USER_STATUS_CHANGED": 4,
+		}
+		for eventType, expectedStage := range expectedStages {
+			if !foundTypes[eventType] {
+				t.Fatalf("ユーザーイベントタイムライン手続き版に期待したイベント種別が見つかりませんでした: eventType=%s", eventType)
+			}
+			if stageByType[eventType] != expectedStage {
+				t.Fatalf("ユーザーイベントタイムライン手続き版の段階ラベルが期待値と異なります: eventType=%s actual=%s", eventType, stageByType[eventType])
+			}
+			if sequenceByType[eventType] != expectedSequence[eventType] {
+				t.Fatalf("ユーザーイベントタイムライン手続き版の順序番号が期待値と異なります: eventType=%s actual=%d", eventType, sequenceByType[eventType])
+			}
+		}
+	})
+}
+
+func TestPendingTransactionBacklogSummaryProcedural(t *testing.T) {
+	t.Run("滞留中トランザクション手続き版_エスカレーション要否と理由を返す", func(t *testing.T) {
+		ctx, tx, masters := setupTest(t)
+		now := currentDBTime(t, ctx, tx)
+		userID := testdb.NewUserBuilder().WithStatusID(masters.ActiveUserStatusID).BuildForTest(t, ctx, tx)
+
+		(&testdb.FiatDepositBuilder{
+			UserID:          userID,
+			PublicHash:      "backlog-procedural-pending-fiat-deposit",
+			CurrencyID:      masters.JPYCurrencyID,
+			Amount:          "123456",
+			DepositStatusID: masters.PendingDepositStatusID,
+			RequestedAt:     now.Add(-30 * time.Hour),
+			CompletedAt:     sql.NullTime{},
+		}).BuildForTest(t, ctx, tx)
+		(&testdb.CryptoWithdrawalBuilder{
+			UserID:             userID,
+			PublicHash:         "backlog-procedural-pending-crypto-withdrawal",
+			CurrencyID:         masters.BTCurrencyID,
+			DestinationAddress: "backlog_procedural_pending_btc",
+			Amount:             "0.50000000",
+			TxHash:             sql.NullString{},
+			WithdrawalStatusID: masters.PendingWithdrawalID,
+			RequestedAt:        now.Add(-2 * time.Hour),
+			CompletedAt:        sql.NullTime{},
+		}).BuildForTest(t, ctx, tx)
+
+		rows := queryRows(t, ctx, tx, "examples/pending_transaction_backlog_summary_procedural.sql")
+		defer rows.Close()
+
+		var foundOver24 bool
+		var foundUnder24 bool
+		for rows.Next() {
+			var (
+				operationType     string
+				currencyCode      string
+				backlogBucket     string
+				backlogCount      int64
+				oldestStartedAt   time.Time
+				maxPendingMinutes int64
+				escalationNeeded  int64
+				escalationReason  string
+			)
+			if err := rows.Scan(&operationType, &currencyCode, &backlogBucket, &backlogCount, &oldestStartedAt, &maxPendingMinutes, &escalationNeeded, &escalationReason); err != nil {
+				t.Fatalf("滞留中トランザクション手続き版の行読み取りに失敗しました: %v", err)
+			}
+			_ = oldestStartedAt
+			if operationType == "FIAT_DEPOSIT" && currencyCode == "JPY" && backlogBucket == "OVER_24_HOURS" {
+				foundOver24 = true
+				assertGreaterOrEqualInt64(t, backlogCount, 1, "手続き版の24時間超滞留件数")
+				assertGreaterOrEqualInt64(t, maxPendingMinutes, 24*60, "手続き版の24時間超滞留分数")
+				if escalationNeeded != 1 || escalationReason != "24時間超の滞留が存在" {
+					t.Fatalf("滞留中トランザクション手続き版のエスカレーション判定が期待値と異なります: needed=%d reason=%s", escalationNeeded, escalationReason)
+				}
+			}
+			if operationType == "CRYPTO_WITHDRAWAL" && currencyCode == "BTC" && backlogBucket == "UNDER_24_HOURS" {
+				foundUnder24 = true
+				assertGreaterOrEqualInt64(t, backlogCount, 1, "手続き版の24時間以内滞留件数")
+				assertGreaterOrEqualInt64(t, maxPendingMinutes, 120, "手続き版の24時間以内滞留分数")
+				if escalationNeeded != 0 || escalationReason != "通常監視" {
+					t.Fatalf("滞留中トランザクション手続き版の通常監視判定が期待値と異なります: needed=%d reason=%s", escalationNeeded, escalationReason)
+				}
+			}
+		}
+		if err := rows.Err(); err != nil {
+			t.Fatalf("滞留中トランザクション手続き版の走査中に失敗しました: %v", err)
+		}
+		if !foundOver24 || !foundUnder24 {
+			t.Fatalf("滞留中トランザクション手続き版に期待した集計行が見つかりませんでした: over24=%t under24=%t", foundOver24, foundUnder24)
+		}
+	})
+}
+
 func setupTest(t *testing.T) (context.Context, *sql.Tx, testdb.MasterData) {
 	t.Helper()
 
@@ -2640,8 +3218,14 @@ func queryRows(t *testing.T, ctx context.Context, tx *sql.Tx, relativePath strin
 		t.Fatalf("SQLファイルの読み込みに失敗しました path=%s err=%v", path, err)
 	}
 
-	query := testdb.NormalizeSQL(string(content))
-	rows, err := tx.QueryContext(ctx, query)
+	setupQuery, resultQuery := testdb.SplitProceduralSQL(string(content))
+	if setupQuery != "" {
+		if _, err := tx.ExecContext(ctx, setupQuery); err != nil {
+			t.Fatalf("SQLセットアップの実行に失敗しました path=%s err=%v", path, err)
+		}
+	}
+
+	rows, err := tx.QueryContext(ctx, resultQuery)
 	if err != nil {
 		t.Fatalf("SQLの実行に失敗しました path=%s err=%v", path, err)
 	}

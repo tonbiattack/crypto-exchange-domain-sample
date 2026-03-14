@@ -11,6 +11,12 @@ USE exchange_domain;
   - fee_amount は手数料控除額。
   - theoretical_balance_delta = external_net_amount + trade_net_amount - fee_amount。
     例: JPY 入金 1,000,000、BTC 買付で JPY 500,000 消費、手数料 1,000 なら 499,000。
+
+  実装上の注意:
+  - このSQLは「残高影響の再計算」までは向いているが、
+    実残高テーブルとの突合、差分の自動修復、例外ルールの吸収まで1本でやると重くなる。
+  - 差分の解釈や復旧フローまで含める場合は、
+    SQLは材料抽出に留め、手続き型コード側で段階的に処理する方がよい。
 */
 WITH balance_impacts AS (
   -- 法定入金の完了分は、その通貨残高を外部要因で増加させる。
