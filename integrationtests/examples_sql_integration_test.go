@@ -3,6 +3,7 @@ package integrationtests
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -481,7 +482,7 @@ func TestSuspiciousRapidOutflowCandidates(t *testing.T) {
 			CompletedAt:        sql.NullTime{Time: depositCompletedAt.Add(3*time.Hour + 20*time.Minute), Valid: true},
 		}).BuildForTest(t, ctx, tx)
 
-		rows := queryRows(t, ctx, tx, "examples/suspicious_rapid_outflow_candidates.sql")
+		rows := queryRows(t, ctx, tx, "examples/suspicious_transactions/suspicious_rapid_outflow_candidates.sql")
 		defer rows.Close()
 
 		var found bool
@@ -591,7 +592,7 @@ func TestSuspiciousOpenAlertCaseQueue(t *testing.T) {
 			OpenedAt:        time.Date(2031, 3, 2, 10, 40, 0, 0, time.UTC),
 		}).BuildForTest(t, ctx, tx)
 
-		rows := queryRows(t, ctx, tx, "examples/suspicious_open_alert_case_queue.sql")
+		rows := queryRows(t, ctx, tx, "examples/suspicious_transactions/suspicious_open_alert_case_queue.sql")
 		defer rows.Close()
 
 		var found bool
@@ -676,6 +677,242 @@ func TestSuspiciousOpenAlertCaseQueue(t *testing.T) {
 	})
 }
 
+func TestSuspiciousThresholdEvasionTradeCandidates(t *testing.T) {
+	t.Run("疑わしい取引_敷居値直下へ分散した売買候補を返す", func(t *testing.T) {
+		ctx, tx, masters := setupTest(t)
+		base := time.Date(2031, 3, 3, 9, 0, 0, 0, time.UTC)
+
+		userBuilder := testdb.NewUserBuilder().WithStatusID(masters.ActiveUserStatusID)
+		memberCode := userBuilder.MemberCode
+		userID := userBuilder.BuildForTest(t, ctx, tx)
+
+		for i, amount := range []string{"990000", "995000", "998000"} {
+			orderID := (&testdb.TradingOrderBuilder{
+				UserID:         userID,
+				PublicHash:     fmt.Sprintf("threshold-evasion-order-%d", i+1),
+				Side:           "BUY",
+				OrderType:      "LIMIT",
+				FromCurrencyID: masters.JPYCurrencyID,
+				ToCurrencyID:   masters.BTCurrencyID,
+				Price:          "1000000",
+				Quantity:       "1.00000000",
+				OrderStatusID:  masters.FilledOrderStatusID,
+				PlacedAt:       base.Add(time.Duration(i) * time.Hour),
+			}).BuildForTest(t, ctx, tx)
+
+			(&testdb.TradeExecutionBuilder{
+				OrderID:          orderID,
+				UserID:           userID,
+				PublicHash:       fmt.Sprintf("threshold-evasion-execution-%d", i+1),
+				FromCurrencyID:   masters.JPYCurrencyID,
+				ToCurrencyID:     masters.BTCurrencyID,
+				ExecutedPrice:    "1000000",
+				ExecutedQuantity: "1.00000000",
+				FromAmount:       amount,
+				ToAmount:         "1.00000000",
+				FeeCurrencyID:    masters.JPYCurrencyID,
+				FeeAmount:        "1000",
+				ExecutedAt:       base.Add(time.Duration(i) * time.Hour),
+			}).BuildForTest(t, ctx, tx)
+		}
+
+		rows := queryRows(t, ctx, tx, "examples/suspicious_transactions/suspicious_threshold_evasion_trade_candidates.sql")
+		defer rows.Close()
+
+		var found bool
+		for rows.Next() {
+			var (
+				userIDGot           int64
+				memberCodeGot       string
+				fromCurrencyCode    string
+				toCurrencyCode      string
+				tradeCount          int64
+				totalFromAmount     string
+				avgFromAmount       string
+				minFromAmount       string
+				maxFromAmount       string
+				firstExecutedAt     time.Time
+				lastExecutedAt      time.Time
+				thresholdGapPercent string
+			)
+			if err := rows.Scan(
+				&userIDGot,
+				&memberCodeGot,
+				&fromCurrencyCode,
+				&toCurrencyCode,
+				&tradeCount,
+				&totalFromAmount,
+				&avgFromAmount,
+				&minFromAmount,
+				&maxFromAmount,
+				&firstExecutedAt,
+				&lastExecutedAt,
+				&thresholdGapPercent,
+			); err != nil {
+				t.Fatalf("敷居値直下分散売買SQLの行読み取りに失敗しました: %v", err)
+			}
+			_ = firstExecutedAt
+			_ = lastExecutedAt
+
+			if userIDGot == userID {
+				found = true
+				if memberCodeGot != memberCode || fromCurrencyCode != "JPY" || toCurrencyCode != "BTC" {
+					t.Fatalf("敷居値直下分散売買SQLの属性が期待値と異なります: member=%s from=%s to=%s", memberCodeGot, fromCurrencyCode, toCurrencyCode)
+				}
+				assertEqualInt64(t, tradeCount, 3, "敷居値直下分散売買の件数")
+				if totalFromAmount != "2983000.000000000000000000" {
+					t.Fatalf("敷居値直下分散売買の総額が期待値と異なります: actual=%s", totalFromAmount)
+				}
+				if minFromAmount != "990000.000000000000000000" || maxFromAmount != "998000.000000000000000000" {
+					t.Fatalf("敷居値直下分散売買の最小最大が期待値と異なります: min=%s max=%s", minFromAmount, maxFromAmount)
+				}
+				if thresholdGapPercent != "0.2000" {
+					t.Fatalf("敷居値直下分散売買の閾値乖離率が期待値と異なります: actual=%s", thresholdGapPercent)
+				}
+				if avgFromAmount != "994333.333333333333333333" {
+					t.Fatalf("敷居値直下分散売買の平均額が期待値と異なります: actual=%s", avgFromAmount)
+				}
+			}
+		}
+
+		if err := rows.Err(); err != nil {
+			t.Fatalf("敷居値直下分散売買SQLの走査中に失敗しました: %v", err)
+		}
+		if !found {
+			t.Fatal("敷居値直下分散売買SQLに挿入した行が見つかりませんでした")
+		}
+	})
+}
+
+func TestSuspiciousSmallThenLargeTradeBurst(t *testing.T) {
+	t.Run("疑わしい取引_少額成功直後の高額連続売買を返す", func(t *testing.T) {
+		ctx, tx, masters := setupTest(t)
+		base := time.Date(2031, 3, 4, 10, 0, 0, 0, time.UTC)
+
+		userBuilder := testdb.NewUserBuilder().WithStatusID(masters.ActiveUserStatusID)
+		memberCode := userBuilder.MemberCode
+		userID := userBuilder.BuildForTest(t, ctx, tx)
+
+		smallOrderID := (&testdb.TradingOrderBuilder{
+			UserID:         userID,
+			PublicHash:     "small-then-large-order-1",
+			Side:           "BUY",
+			OrderType:      "LIMIT",
+			FromCurrencyID: masters.JPYCurrencyID,
+			ToCurrencyID:   masters.BTCurrencyID,
+			Price:          "1000000",
+			Quantity:       "0.00100000",
+			OrderStatusID:  masters.FilledOrderStatusID,
+			PlacedAt:       base,
+		}).BuildForTest(t, ctx, tx)
+		(&testdb.TradeExecutionBuilder{
+			OrderID:          smallOrderID,
+			UserID:           userID,
+			PublicHash:       "small-then-large-execution-1",
+			FromCurrencyID:   masters.JPYCurrencyID,
+			ToCurrencyID:     masters.BTCurrencyID,
+			ExecutedPrice:    "1000000",
+			ExecutedQuantity: "0.00100000",
+			FromAmount:       "1000",
+			ToAmount:         "0.00100000",
+			FeeCurrencyID:    masters.JPYCurrencyID,
+			FeeAmount:        "10",
+			ExecutedAt:       base.Add(5 * time.Minute),
+		}).BuildForTest(t, ctx, tx)
+
+		for i, amount := range []string{"1500000", "1800000"} {
+			orderID := (&testdb.TradingOrderBuilder{
+				UserID:         userID,
+				PublicHash:     fmt.Sprintf("small-then-large-order-%d", i+2),
+				Side:           "BUY",
+				OrderType:      "LIMIT",
+				FromCurrencyID: masters.JPYCurrencyID,
+				ToCurrencyID:   masters.BTCurrencyID,
+				Price:          "1000000",
+				Quantity:       "1.50000000",
+				OrderStatusID:  masters.FilledOrderStatusID,
+				PlacedAt:       base.Add(time.Duration(i+1) * time.Hour),
+			}).BuildForTest(t, ctx, tx)
+			(&testdb.TradeExecutionBuilder{
+				OrderID:          orderID,
+				UserID:           userID,
+				PublicHash:       fmt.Sprintf("small-then-large-execution-%d", i+2),
+				FromCurrencyID:   masters.JPYCurrencyID,
+				ToCurrencyID:     masters.BTCurrencyID,
+				ExecutedPrice:    "1000000",
+				ExecutedQuantity: "1.50000000",
+				FromAmount:       amount,
+				ToAmount:         "1.50000000",
+				FeeCurrencyID:    masters.JPYCurrencyID,
+				FeeAmount:        "1000",
+				ExecutedAt:       base.Add(time.Duration(i+1) * time.Hour),
+			}).BuildForTest(t, ctx, tx)
+		}
+
+		rows := queryRows(t, ctx, tx, "examples/suspicious_transactions/suspicious_small_then_large_trade_burst.sql")
+		defer rows.Close()
+
+		var found bool
+		for rows.Next() {
+			var (
+				userIDGot            int64
+				memberCodeGot        string
+				fromCurrencyCode     string
+				toCurrencyCode       string
+				initialExecutedAt    time.Time
+				initialFromAmount    string
+				largeTradeCount      int64
+				largeTradeTotal      string
+				firstLargeExecutedAt time.Time
+				lastLargeExecutedAt  time.Time
+				burstHours           string
+			)
+			if err := rows.Scan(
+				&userIDGot,
+				&memberCodeGot,
+				&fromCurrencyCode,
+				&toCurrencyCode,
+				&initialExecutedAt,
+				&initialFromAmount,
+				&largeTradeCount,
+				&largeTradeTotal,
+				&firstLargeExecutedAt,
+				&lastLargeExecutedAt,
+				&burstHours,
+			); err != nil {
+				t.Fatalf("少額成功直後の高額連続売買SQLの行読み取りに失敗しました: %v", err)
+			}
+			_ = initialExecutedAt
+			_ = firstLargeExecutedAt
+			_ = lastLargeExecutedAt
+
+			if userIDGot == userID {
+				found = true
+				if memberCodeGot != memberCode || fromCurrencyCode != "JPY" || toCurrencyCode != "BTC" {
+					t.Fatalf("少額成功直後の高額連続売買SQLの属性が期待値と異なります: member=%s from=%s to=%s", memberCodeGot, fromCurrencyCode, toCurrencyCode)
+				}
+				if initialFromAmount != "1000.000000000000000000" {
+					t.Fatalf("少額成功直後の高額連続売買SQLの初回少額が期待値と異なります: actual=%s", initialFromAmount)
+				}
+				assertEqualInt64(t, largeTradeCount, 2, "高額連続売買の件数")
+				if largeTradeTotal != "3300000.000000000000000000" {
+					t.Fatalf("高額連続売買の総額が期待値と異なります: actual=%s", largeTradeTotal)
+				}
+				if burstHours != "1.92" {
+					t.Fatalf("高額連続売買の経過時間が期待値と異なります: actual=%s", burstHours)
+				}
+			}
+		}
+
+		if err := rows.Err(); err != nil {
+			t.Fatalf("少額成功直後の高額連続売買SQLの走査中に失敗しました: %v", err)
+		}
+		if !found {
+			t.Fatal("少額成功直後の高額連続売買SQLに挿入した行が見つかりませんでした")
+		}
+	})
+}
+
 func TestAlertRuleDetectionSummary(t *testing.T) {
 	t.Run("ルール別検知集計_検知件数とケース化率を返す", func(t *testing.T) {
 		ctx, tx, masters := setupTest(t)
@@ -726,7 +963,7 @@ func TestAlertRuleDetectionSummary(t *testing.T) {
 			OpenedAt:        time.Date(2031, 3, 3, 9, 30, 0, 0, time.UTC),
 		}).BuildForTest(t, ctx, tx)
 
-		rows := queryRows(t, ctx, tx, "examples/alert_rule_detection_summary.sql")
+		rows := queryRows(t, ctx, tx, "examples/suspicious_transactions/alert_rule_detection_summary.sql")
 		defer rows.Close()
 
 		var found bool
@@ -815,7 +1052,7 @@ func TestCaseBacklogSummary(t *testing.T) {
 			OpenedAt:        openedAt,
 		}).BuildForTest(t, ctx, tx)
 
-		rows := queryRows(t, ctx, tx, "examples/case_backlog_summary.sql")
+		rows := queryRows(t, ctx, tx, "examples/suspicious_transactions/case_backlog_summary.sql")
 		defer rows.Close()
 
 		var found bool
@@ -910,7 +1147,7 @@ func TestSuspiciousWithdrawalConcentrationCandidates(t *testing.T) {
 			CompletedAt:        sql.NullTime{Time: now.Add(-2*time.Hour - 30*time.Minute), Valid: true},
 		}).BuildForTest(t, ctx, tx)
 
-		rows := queryRows(t, ctx, tx, "examples/suspicious_withdrawal_concentration_candidates.sql")
+		rows := queryRows(t, ctx, tx, "examples/suspicious_transactions/suspicious_withdrawal_concentration_candidates.sql")
 		defer rows.Close()
 
 		var found bool
@@ -1229,7 +1466,7 @@ func TestCaseLeadTimeSummary(t *testing.T) {
 			ClosedAt:        sql.NullTime{Time: closedAt, Valid: true},
 		}).BuildForTest(t, ctx, tx)
 
-		rows := queryRows(t, ctx, tx, "examples/case_lead_time_summary.sql")
+		rows := queryRows(t, ctx, tx, "examples/suspicious_transactions/case_lead_time_summary.sql")
 		defer rows.Close()
 
 		var found bool
@@ -1296,7 +1533,7 @@ func TestRuleFalsePositiveProxy(t *testing.T) {
 			Note:               "integration-false-positive-proxy",
 		}).BuildForTest(t, ctx, tx)
 
-		rows := queryRows(t, ctx, tx, "examples/rule_false_positive_proxy.sql")
+		rows := queryRows(t, ctx, tx, "examples/suspicious_transactions/rule_false_positive_proxy.sql")
 		defer rows.Close()
 
 		var found bool
@@ -1587,7 +1824,7 @@ func TestUserCaseOverview(t *testing.T) {
 			CompletedAt:      sql.NullTime{Time: time.Date(2031, 3, 14, 9, 50, 0, 0, time.UTC), Valid: true},
 		}).BuildForTest(t, ctx, tx)
 
-		rows := queryRows(t, ctx, tx, "examples/user_case_overview.sql")
+		rows := queryRows(t, ctx, tx, "examples/suspicious_transactions/user_case_overview.sql")
 		defer rows.Close()
 
 		// このSQLは alert_event_logs / suspicious_cases / account_actions を同時に LEFT JOIN している。
@@ -1672,7 +1909,7 @@ func TestAlertToCaseConversionTime(t *testing.T) {
 			OpenedAt:        detectedAt.Add(30 * time.Minute),
 		}).BuildForTest(t, ctx, tx)
 
-		rows := queryRows(t, ctx, tx, "examples/alert_to_case_conversion_time.sql")
+		rows := queryRows(t, ctx, tx, "examples/suspicious_transactions/alert_to_case_conversion_time.sql")
 		defer rows.Close()
 
 		// detected_at から opened_at までを 30分差で投入している。
@@ -1744,7 +1981,7 @@ func TestDestinationAddressReuseCandidates(t *testing.T) {
 			CompletedAt:        sql.NullTime{Time: requested2.Add(20 * time.Minute), Valid: true},
 		}).BuildForTest(t, ctx, tx)
 
-		rows := queryRows(t, ctx, tx, "examples/destination_address_reuse_candidates.sql")
+		rows := queryRows(t, ctx, tx, "examples/suspicious_transactions/destination_address_reuse_candidates.sql")
 		defer rows.Close()
 
 		// 同一 destination_address を2ユーザーで共有しているデータを投入している。
@@ -2035,7 +2272,7 @@ func TestHighRiskUserActivitySummary(t *testing.T) {
 			CompletedAt:      sql.NullTime{Time: base.Add(70 * time.Minute), Valid: true},
 		}).BuildForTest(t, ctx, tx)
 
-		rows := queryRows(t, ctx, tx, "examples/high_risk_user_activity_summary.sql")
+		rows := queryRows(t, ctx, tx, "examples/suspicious_transactions/high_risk_user_activity_summary.sql")
 		defer rows.Close()
 
 		var found bool
@@ -2157,7 +2394,7 @@ func TestAlertRepeatUserSummary(t *testing.T) {
 			OpenedAt:        base.Add(20 * time.Minute),
 		}).BuildForTest(t, ctx, tx)
 
-		rows := queryRows(t, ctx, tx, "examples/alert_repeat_user_summary.sql")
+		rows := queryRows(t, ctx, tx, "examples/suspicious_transactions/alert_repeat_user_summary.sql")
 		defer rows.Close()
 
 		var found bool
@@ -2247,7 +2484,7 @@ func TestStatusChangeAfterAlert(t *testing.T) {
 			ChangedAt:           detectedAt.Add(5 * time.Minute),
 		}).BuildForTest(t, ctx, tx)
 
-		rows := queryRows(t, ctx, tx, "examples/status_change_after_alert.sql")
+		rows := queryRows(t, ctx, tx, "examples/suspicious_transactions/status_change_after_alert.sql")
 		defer rows.Close()
 
 		var found bool
@@ -2310,7 +2547,7 @@ func TestLargeUnmatchedCryptoInflow(t *testing.T) {
 			ConfirmedAt:     sql.NullTime{Time: base.Add(30 * time.Minute), Valid: true},
 		}).BuildForTest(t, ctx, tx)
 
-		rows := queryRows(t, ctx, tx, "examples/large_unmatched_crypto_inflow.sql")
+		rows := queryRows(t, ctx, tx, "examples/suspicious_transactions/large_unmatched_crypto_inflow.sql")
 		defer rows.Close()
 
 		var found bool
@@ -2418,7 +2655,7 @@ func TestUserAlertCaseTimeline(t *testing.T) {
 			OccurredAt:  base.Add(35 * time.Minute),
 		}).BuildForTest(t, ctx, tx)
 
-		rows := queryRows(t, ctx, tx, "examples/user_alert_case_timeline.sql")
+		rows := queryRows(t, ctx, tx, "examples/suspicious_transactions/user_alert_case_timeline.sql")
 		defer rows.Close()
 
 		foundTypes := map[string]bool{}
@@ -2551,7 +2788,7 @@ func TestSuspiciousRapidOutflowCandidatesProcedural(t *testing.T) {
 			CompletedAt:        sql.NullTime{Time: depositCompletedAt.Add(2*time.Hour + 15*time.Minute), Valid: true},
 		}).BuildForTest(t, ctx, tx)
 
-		rows := queryRows(t, ctx, tx, "examples/suspicious_rapid_outflow_candidates_procedural.sql")
+		rows := queryRows(t, ctx, tx, "examples/suspicious_transactions/suspicious_rapid_outflow_candidates_procedural.sql")
 		defer rows.Close()
 
 		var found bool
@@ -2782,7 +3019,7 @@ func TestStatusChangeAfterAlertProcedural(t *testing.T) {
 			ChangedAt:           detectedAt.Add(3 * time.Hour),
 		}).BuildForTest(t, ctx, tx)
 
-		rows := queryRows(t, ctx, tx, "examples/status_change_after_alert_procedural.sql")
+		rows := queryRows(t, ctx, tx, "examples/suspicious_transactions/status_change_after_alert_procedural.sql")
 		defer rows.Close()
 
 		var found bool
@@ -2851,7 +3088,7 @@ func TestLargeUnmatchedCryptoInflowProcedural(t *testing.T) {
 			ConfirmedAt:     sql.NullTime{Time: base.Add(30 * time.Minute), Valid: true},
 		}).BuildForTest(t, ctx, tx)
 
-		rows := queryRows(t, ctx, tx, "examples/large_unmatched_crypto_inflow_procedural.sql")
+		rows := queryRows(t, ctx, tx, "examples/suspicious_transactions/large_unmatched_crypto_inflow_procedural.sql")
 		defer rows.Close()
 
 		var found bool
@@ -2964,7 +3201,7 @@ func TestUserAlertCaseTimelineProcedural(t *testing.T) {
 			OccurredAt:  base.Add(35 * time.Minute),
 		}).BuildForTest(t, ctx, tx)
 
-		rows := queryRows(t, ctx, tx, "examples/user_alert_case_timeline_procedural.sql")
+		rows := queryRows(t, ctx, tx, "examples/suspicious_transactions/user_alert_case_timeline_procedural.sql")
 		defer rows.Close()
 
 		foundTypes := map[string]bool{}
@@ -3159,7 +3396,7 @@ func TestMultiHopFundFlowCandidates(t *testing.T) {
 			CompletedAt:        sql.NullTime{Time: base.Add(3 * time.Hour), Valid: true},
 		}).BuildForTest(t, ctx, tx)
 
-		rows := queryRows(t, ctx, tx, "examples/multi_hop_fund_flow_candidates.sql")
+		rows := queryRows(t, ctx, tx, "examples/suspicious_transactions/multi_hop_fund_flow_candidates.sql")
 		defer rows.Close()
 
 		var found bool
@@ -3307,7 +3544,7 @@ func TestAlertCaseActionLeadTime(t *testing.T) {
 			OccurredAt:  detectedAt.Add(35 * time.Minute),
 		}).BuildForTest(t, ctx, tx)
 
-		rows := queryRows(t, ctx, tx, "examples/alert_case_action_lead_time.sql")
+		rows := queryRows(t, ctx, tx, "examples/suspicious_transactions/alert_case_action_lead_time.sql")
 		defer rows.Close()
 
 		var found bool
@@ -3397,7 +3634,7 @@ func TestSameDestinationClusterSummary(t *testing.T) {
 			CompletedAt:        sql.NullTime{Time: now.Add(-60 * time.Minute), Valid: true},
 		}).BuildForTest(t, ctx, tx)
 
-		rows := queryRows(t, ctx, tx, "examples/same_destination_cluster_summary.sql")
+		rows := queryRows(t, ctx, tx, "examples/suspicious_transactions/same_destination_cluster_summary.sql")
 		defer rows.Close()
 
 		var found bool
@@ -3433,6 +3670,72 @@ func TestSameDestinationClusterSummary(t *testing.T) {
 		}
 		if !found {
 			t.Fatal("同一送金先クラスタ集計に挿入した行が見つかりませんでした")
+		}
+	})
+}
+
+func TestSuspiciousSplitWithdrawalCandidates(t *testing.T) {
+	t.Run("疑わしい取引_同一送金先への分割出金候補を返す", func(t *testing.T) {
+		ctx, tx, masters := setupTest(t)
+		now := currentDBTime(t, ctx, tx)
+
+		userBuilder := testdb.NewUserBuilder().WithStatusID(masters.ActiveUserStatusID)
+		memberCode := userBuilder.MemberCode
+		userID := userBuilder.BuildForTest(t, ctx, tx)
+
+		address := "split-withdrawal-candidate-address"
+		for i, amount := range []string{"0.40000000", "0.35000000", "0.25000000"} {
+			(&testdb.CryptoWithdrawalBuilder{
+				UserID:             userID,
+				PublicHash:         fmt.Sprintf("split-withdrawal-%d", i+1),
+				CurrencyID:         masters.BTCurrencyID,
+				DestinationAddress: address,
+				Amount:             amount,
+				TxHash:             sql.NullString{String: fmt.Sprintf("split-withdrawal-tx-%d", i+1), Valid: true},
+				WithdrawalStatusID: masters.CompletedWithdrawalID,
+				RequestedAt:        now.Add(time.Duration(-4+i) * time.Hour),
+				CompletedAt:        sql.NullTime{Time: now.Add(time.Duration(-3+i) * time.Hour), Valid: true},
+			}).BuildForTest(t, ctx, tx)
+		}
+
+		rows := queryRows(t, ctx, tx, "examples/suspicious_transactions/suspicious_split_withdrawal_candidates.sql")
+		defer rows.Close()
+
+		var found bool
+		for rows.Next() {
+			var (
+				userIDGot          int64
+				memberCodeGot      string
+				currencyCode       string
+				destinationAddress string
+				withdrawalCount    int64
+				totalAmount        string
+				firstWithdrawalAt  time.Time
+				lastWithdrawalAt   time.Time
+				spreadMinutes      int64
+			)
+			if err := rows.Scan(&userIDGot, &memberCodeGot, &currencyCode, &destinationAddress, &withdrawalCount, &totalAmount, &firstWithdrawalAt, &lastWithdrawalAt, &spreadMinutes); err != nil {
+				t.Fatalf("分割出金候補SQLの行読み取りに失敗しました: %v", err)
+			}
+			_ = firstWithdrawalAt
+			_ = lastWithdrawalAt
+			if userIDGot == userID && destinationAddress == address {
+				found = true
+				if memberCodeGot != memberCode || currencyCode != "BTC" {
+					t.Fatalf("分割出金候補SQLの属性が期待値と異なります: member=%s currency=%s", memberCodeGot, currencyCode)
+				}
+				assertEqualInt64(t, withdrawalCount, 3, "分割出金候補の出金件数")
+				if totalAmount != "1.000000000000000000" {
+					t.Fatalf("分割出金候補の総出金量が期待値と異なります: actual=%s", totalAmount)
+				}
+				assertEqualInt64(t, spreadMinutes, 120, "分割出金候補の時間幅")
+			}
+		}
+		if err := rows.Err(); err != nil {
+			t.Fatalf("分割出金候補SQLの走査中に失敗しました: %v", err)
+		}
+		if !found {
+			t.Fatal("分割出金候補SQLに挿入した行が見つかりませんでした")
 		}
 	})
 }
@@ -3535,7 +3838,7 @@ func TestCaseReopenAndRealertSummary(t *testing.T) {
 			Note:               "case-reopen-realert",
 		}).BuildForTest(t, ctx, tx)
 
-		rows := queryRows(t, ctx, tx, "examples/case_reopen_and_realert_summary.sql")
+		rows := queryRows(t, ctx, tx, "examples/suspicious_transactions/case_reopen_and_realert_summary.sql")
 		defer rows.Close()
 
 		var found bool
@@ -3697,7 +4000,7 @@ func TestStuckCaseQueue(t *testing.T) {
 			ChangedAt:    now.Add(-72 * time.Hour),
 		}).BuildForTest(t, ctx, tx)
 
-		rows := queryRows(t, ctx, tx, "examples/stuck_case_queue.sql")
+		rows := queryRows(t, ctx, tx, "examples/suspicious_transactions/stuck_case_queue.sql")
 		defer rows.Close()
 
 		var found bool

@@ -2,7 +2,7 @@ USE exchange_domain;
 
 /*
   コピー元:
-  - examples/status_change_after_alert.sql
+  - examples/suspicious_transactions/status_change_after_alert.sql
 
   元SQLの問題点:
   - アラートと状態変更の結合、最短応答の採用、応答速度ラベル付けが 1 本に寄ると、

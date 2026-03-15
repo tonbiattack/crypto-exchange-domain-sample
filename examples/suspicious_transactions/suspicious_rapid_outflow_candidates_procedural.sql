@@ -2,7 +2,7 @@ USE exchange_domain;
 
 /*
   コピー元:
-  - examples/suspicious_rapid_outflow_candidates.sql
+  - examples/suspicious_transactions/suspicious_rapid_outflow_candidates.sql
 
   元SQLの問題点:
   - 流入抽出、出金照合、閾値判定、優先度付けを 1 本の SELECT に詰め込むと、

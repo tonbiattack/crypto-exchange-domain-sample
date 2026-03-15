@@ -2,7 +2,7 @@ USE exchange_domain;
 
 /*
   コピー元:
-  - examples/large_unmatched_crypto_inflow.sql
+  - examples/suspicious_transactions/large_unmatched_crypto_inflow.sql
 
   元SQLの問題点:
   - 大口入金抽出、売却照合、出金照合、レビュー優先度付けを 1 本でやると、

@@ -2,7 +2,7 @@ USE exchange_domain;
 
 /*
   コピー元:
-  - examples/user_alert_case_timeline.sql
+  - examples/suspicious_transactions/user_alert_case_timeline.sql
 
   元SQLの問題点:
   - イベント正規化と画面向けの並び順付けが同居すると、
